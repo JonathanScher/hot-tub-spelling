@@ -3,7 +3,7 @@
  * Configured for Canadian French (fr-CA) with fallback to global French voices.
  *
  * Cascade Order:
- *  1. Tier 1 (Custom Audio URL): Plays optional custom_audio_url / audio_url from Google Sheets.
+ *  1. Tier 1 (Custom Audio URL): Plays optional custom_audio_url / audio_url from Firebase Cloud Firestore.
  *  2. Tier 2 (Dictionary API Human Audio): Fetches https://api.dictionaryapi.dev/api/v2/entries/en/<word>,
  *     extracts valid .mp3 phonetic audio URL (if learning English words with French accents),
  *     caches in memory, and plays via HTML5 <audio>.
@@ -141,7 +141,7 @@ class SpeechCascadeEngine {
     this._notifySpeaking(true);
 
     try {
-      // TIER 1: Optional Custom Audio URL from Google Sheets
+      // TIER 1: Optional Custom Audio URL from Firebase Cloud Firestore
       const customUrl = String(record.custom_audio_url || record.audio_url || '').trim();
       if (customUrl) {
         const tier1Ok = await this._playHtml5Audio(this._normalizeUrl(customUrl), token, 4500);

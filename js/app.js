@@ -4,6 +4,7 @@
 
 import { soundEngine } from './audio.js';
 import { speechEngine } from './speech.js';
+import { authManager } from './auth.js';
 import {
   loadWords,
   buildSessionWords,
@@ -15,8 +16,7 @@ import {
   getLocalISODate,
   normalizeWord
 } from './srs.js';
-import { syncManager, generateQrCodeSvg } from './sync.js';
-import { authManager } from './auth.js';
+import { syncManager } from './sync.js';
 import { HotTubGame } from './game.js';
 
 const LOCK_HOLD_DURATION_MS = 2000;
@@ -34,23 +34,14 @@ function initApp() {
   const btnPlay = document.getElementById('btn-play');
   const btnPlayText = document.getElementById('btn-play-text');
 
-  // Google Auth DOM References
+  // Auth Gate & User Pill on Welcome Screen
   const authGateBox = document.getElementById('auth-gate-box');
-  const googleSigninBtn = document.getElementById('google-signin-btn');
+  const btnGoogleSignin = document.getElementById('btn-google-signin');
   const authErrorMsg = document.getElementById('auth-error-msg');
-  const authUserPill = document.getElementById('auth-user-pill');
-  const authUserAvatar = document.getElementById('auth-user-avatar');
-  const authUserLabel = document.getElementById('auth-user-label');
+  const welcomeUserPill = document.getElementById('welcome-user-pill');
+  const welcomeUserAvatar = document.getElementById('welcome-user-avatar');
+  const welcomeUserLabel = document.getElementById('welcome-user-label');
   const btnWelcomeSignout = document.getElementById('btn-welcome-signout');
-
-  const parentAuthBadge = document.getElementById('parent-auth-badge');
-  const parentAuthAvatar = document.getElementById('parent-auth-avatar');
-  const parentAuthName = document.getElementById('parent-auth-name');
-  const parentAuthEmail = document.getElementById('parent-auth-email');
-  const btnParentSignout = document.getElementById('btn-parent-signout');
-  const allowedEmailsChips = document.getElementById('allowed-emails-chips');
-  const inputExtraEmail = document.getElementById('input-extra-email');
-  const btnAddExtraEmail = document.getElementById('btn-add-extra-email');
 
   const completeOverlay = document.getElementById('complete-overlay');
   const completeSummaryText = document.getElementById('complete-summary-text');
@@ -76,13 +67,17 @@ function initApp() {
 
   const parentModal = document.getElementById('parent-modal');
   const btnCloseParent = document.getElementById('btn-close-parent');
-  const inputSyncUrl = document.getElementById('input-sync-url');
-  const btnSaveSync = document.getElementById('btn-save-sync');
   const parentSyncBadge = document.getElementById('parent-sync-badge');
-  const shareSetupPanel = document.getElementById('share-setup-panel');
-  const qrCodeContainer = document.getElementById('qr-code-container');
-  const inputShareLink = document.getElementById('input-share-link');
-  const btnCopyShareLink = document.getElementById('btn-copy-share-link');
+
+  const parentAuthSignedIn = document.getElementById('parent-auth-signed-in');
+  const parentAuthAvatar = document.getElementById('parent-auth-avatar');
+  const parentAuthName = document.getElementById('parent-auth-name');
+  const parentAuthEmail = document.getElementById('parent-auth-email');
+  const btnSyncNow = document.getElementById('btn-sync-now');
+  const btnParentSignout = document.getElementById('btn-parent-signout');
+  const parentAuthSignedOut = document.getElementById('parent-auth-signed-out');
+  const btnParentSignin = document.getElementById('btn-parent-signin');
+  const allowedEmailsChips = document.getElementById('allowed-emails-chips');
 
   const inputWeekLabel = document.getElementById('input-week-label');
   const inputWeeklyWords = document.getElementById('input-weekly-words');
@@ -131,97 +126,128 @@ function initApp() {
     }
   });
 
-  // 0. Wire Google Login & Family Allowlist Gate
-  function syncAuthUi(session, errorInfo = null) {
-    const isAuthed = Boolean(session && session.email);
+  // 1. Wire Firebase Auth State & Family Allowlist Gate
+  function renderAuthState(session, errorInfo = null) {
+    const isSignedIn = Boolean(session && session.email);
 
-    if (authGateBox) authGateBox.hidden = isAuthed;
-    if (btnPlay) btnPlay.hidden = !isAuthed;
-    if (authUserPill) authUserPill.hidden = !isAuthed;
-    if (btnParentLock) btnParentLock.hidden = !isAuthed;
+    if (authGateBox) {
+      authGateBox.hidden = isSignedIn;
+    }
+    if (btnPlay) {
+      btnPlay.hidden = !isSignedIn;
+    }
 
-    if (isAuthed) {
-      if (authErrorMsg) {
+    if (authErrorMsg) {
+      if (errorInfo && errorInfo.message) {
+        authErrorMsg.textContent = errorInfo.message;
+        authErrorMsg.hidden = false;
+      } else {
         authErrorMsg.hidden = true;
-        authErrorMsg.textContent = '';
       }
-      if (authUserLabel) {
-        authUserLabel.textContent = `Signed in as ${session.givenName || session.email}`;
-        authUserLabel.title = session.email;
-      }
-      if (authUserAvatar) {
-        if (session.picture) {
-          authUserAvatar.src = session.picture;
-          authUserAvatar.referrerPolicy = 'no-referrer';
-          authUserAvatar.hidden = false;
-        } else {
-          authUserAvatar.hidden = true;
-        }
-      }
-    } else {
-      // Ensure the game is gated by the start overlay whenever signed out
-      game.pause();
-      if (completeOverlay) {
-        completeOverlay.hidden = true;
-        completeOverlay.classList.remove('is-active');
-      }
-      if (parentModal) parentModal.hidden = true;
-      if (mathGateModal) mathGateModal.hidden = true;
-      if (startOverlay) {
-        startOverlay.hidden = false;
-        startOverlay.classList.add('is-active');
-      }
-      authManager.renderButton(googleSigninBtn);
+    }
 
-      if (authErrorMsg) {
-        if (errorInfo && errorInfo.message) {
-          authErrorMsg.textContent = errorInfo.message;
-          authErrorMsg.hidden = false;
-        } else {
-          authErrorMsg.hidden = true;
-          authErrorMsg.textContent = '';
+    if (welcomeUserPill) {
+      welcomeUserPill.hidden = !isSignedIn;
+      if (isSignedIn) {
+        if (welcomeUserLabel) {
+          welcomeUserLabel.textContent = session.email;
+        }
+        if (welcomeUserAvatar) {
+          if (session.picture) {
+            welcomeUserAvatar.src = session.picture;
+            welcomeUserAvatar.hidden = false;
+          } else {
+            welcomeUserAvatar.hidden = true;
+          }
         }
       }
+    }
+
+    if (parentAuthSignedIn) parentAuthSignedIn.hidden = !isSignedIn;
+    if (parentAuthSignedOut) parentAuthSignedOut.hidden = isSignedIn;
+
+    if (isSignedIn) {
+      if (parentAuthName) parentAuthName.textContent = session.name || session.email;
+      if (parentAuthEmail) parentAuthEmail.textContent = session.email;
+      if (parentAuthAvatar) {
+        if (session.picture) {
+          parentAuthAvatar.src = session.picture;
+          parentAuthAvatar.hidden = false;
+        } else {
+          parentAuthAvatar.hidden = true;
+        }
+      }
+    }
+
+    renderAllowedEmailChips();
+    refreshWelcomeMetadata();
+  }
+
+  function renderAllowedEmailChips() {
+    if (!allowedEmailsChips) return;
+    allowedEmailsChips.innerHTML = '';
+
+    for (const email of authManager.getDefaultAllowedEmails()) {
+      const chip = document.createElement('span');
+      chip.className = 'allowed-email-chip is-default';
+      chip.textContent = email;
+      allowedEmailsChips.appendChild(chip);
+    }
+
+    for (const email of authManager.getExtraAllowedEmails()) {
+      const chip = document.createElement('span');
+      chip.className = 'allowed-email-chip';
+      chip.innerHTML = `${escapeHtml(email)} <button type="button" class="chip-remove-btn" title="Remove">✕</button>`;
+      const removeBtn = chip.querySelector('.chip-remove-btn');
+      if (removeBtn) {
+        removeBtn.addEventListener('click', () => {
+          authManager.removeExtraAllowedEmail(email);
+          renderAllowedEmailChips();
+        });
+      }
+      allowedEmailsChips.appendChild(chip);
     }
   }
 
   authManager.onAuthChange((session, errorInfo) => {
-    syncAuthUi(session, errorInfo);
-    if (session && !errorInfo) {
-      showToast(`Welcome, ${session.givenName || session.email}!`);
-      if (syncManager.getSyncUrl() && navigator.onLine !== false) {
-        syncManager.syncNow().then(() => refreshWelcomeMetadata());
-      }
+    renderAuthState(session, errorInfo);
+    if (errorInfo && errorInfo.message) {
+      showToast(errorInfo.message, 4200);
+    } else if (session && session.email) {
+      syncManager.syncNow().then(() => {
+        refreshWelcomeMetadata();
+        if (parentModal && !parentModal.hidden) {
+          renderParentWordsTable();
+        }
+      });
     }
   });
 
-  syncAuthUi(authManager.getSession());
-  authManager.initGoogleIdentity(googleSigninBtn);
+  renderAuthState(authManager.getSession(), null);
+
+  if (btnGoogleSignin) {
+    btnGoogleSignin.addEventListener('click', () => {
+      authManager.signInWithGoogle();
+    });
+  }
+
+  if (btnParentSignin) {
+    btnParentSignin.addEventListener('click', () => {
+      authManager.signInWithGoogle();
+    });
+  }
+
+  const handleSignOut = async () => {
+    await authManager.signOut();
+    showToast('Signed out of family Google account.');
+    refreshWelcomeMetadata();
+  };
 
   if (btnWelcomeSignout) {
-    btnWelcomeSignout.addEventListener('click', () => {
-      if (window.confirm('Sign out of your Google account on this device?')) {
-        authManager.signOut();
-        showToast('Signed out of Google.');
-      }
-    });
+    btnWelcomeSignout.addEventListener('click', handleSignOut);
   }
-
   if (btnParentSignout) {
-    btnParentSignout.addEventListener('click', () => {
-      parentModal.hidden = true;
-      authManager.signOut();
-      showToast('Signed out of Google.');
-    });
-  }
-
-  // 1. Check ?syncUrl=... query parameter for one-tap Amazon Fire Tablet configuration
-  const autoConfiguredUrl = syncManager.consumeAutoConfigFromUrl();
-  if (autoConfiguredUrl) {
-    showToast('Cloud Sync URL automatically configured for this device!', 4200);
-    if (authManager.isAuthenticated()) {
-      syncManager.syncNow().then(() => refreshWelcomeMetadata());
-    }
+    btnParentSignout.addEventListener('click', handleSignOut);
   }
 
   // 2. Wire Sync Status Indicator
@@ -270,14 +296,18 @@ function initApp() {
       startWeekPill.textContent = `${currentWeek} • Cozy Bathhouse`;
     }
 
-    const hasCloud = Boolean(syncManager.getSyncUrl());
+    const isAuthed = authManager.isAuthenticated();
     if (startSyncNote) {
-      const syncText = hasCloud ? 'Google Sheets Sync active' : 'Offline-ready local storage';
+      const syncText = isAuthed
+        ? navigator.onLine === false
+          ? 'Offline mode (will sync when online)'
+          : 'Firebase Cloud Sync active'
+        : 'Sign in with Google to enable Firebase Sync';
       startSyncNote.textContent = `${activeWords.length} words (${dueCount} due today) • ${syncText}`;
     }
 
     if (syncStatusDot) {
-      syncStatusDot.classList.toggle('is-online', hasCloud && navigator.onLine !== false);
+      syncStatusDot.classList.toggle('is-online', isAuthed && navigator.onLine !== false);
     }
   }
   refreshWelcomeMetadata();
@@ -285,8 +315,7 @@ function initApp() {
   // 6. Session Start ("Play" & "Play Again" Buttons)
   async function launchNewSession(triggerBtn, labelEl) {
     if (!authManager.isAuthenticated()) {
-      showToast('Please sign in with an authorized Google account first.');
-      syncAuthUi(null);
+      showToast('Please sign in once with an authorized family Google account first.');
       return;
     }
 
@@ -301,8 +330,8 @@ function initApp() {
     ]);
     soundEngine.playBubblePop(2);
 
-    // Fetch latest word list & SRS progression from Google Sheets if configured (falling back to localStorage)
-    if (syncManager.getSyncUrl() && navigator.onLine !== false) {
+    // Fetch latest word list & SRS progression from Firebase Cloud Firestore if online
+    if (syncManager.isCloudReady() && navigator.onLine !== false) {
       await syncManager.syncNow(3500);
     }
 
@@ -402,7 +431,6 @@ function initApp() {
 
   btnParentLock.addEventListener('pointerdown', (ev) => {
     ev.preventDefault();
-    if (!authManager.isAuthenticated()) return;
     holdTriggered = false;
     holdStartTs = performance.now();
     btnParentLock.classList.add('is-holding');
@@ -426,7 +454,6 @@ function initApp() {
   btnParentLock.addEventListener('contextmenu', (e) => e.preventDefault());
 
   function openMathGate() {
-    if (!authManager.isAuthenticated()) return;
     game.pause();
     const a = 6 + Math.floor(Math.random() * 8);
     const b = 5 + Math.floor(Math.random() * 9);
@@ -460,87 +487,17 @@ function initApp() {
   });
 
   // 10. Parent Dashboard Operations
-  function renderAllowedEmailsList() {
-    if (!allowedEmailsChips) return;
-    allowedEmailsChips.innerHTML = '';
-
-    for (const email of authManager.getDefaultAllowedEmails()) {
-      const chip = document.createElement('span');
-      chip.className = 'allowed-email-chip is-default';
-      chip.textContent = `🔒 ${email}`;
-      allowedEmailsChips.appendChild(chip);
-    }
-
-    for (const email of authManager.getExtraAllowedEmails()) {
-      const chip = document.createElement('span');
-      chip.className = 'allowed-email-chip';
-      const textSpan = document.createElement('span');
-      textSpan.textContent = email;
-      const removeBtn = document.createElement('button');
-      removeBtn.type = 'button';
-      removeBtn.className = 'chip-remove-btn';
-      removeBtn.textContent = '✕';
-      removeBtn.title = `Remove ${email}`;
-      removeBtn.addEventListener('click', () => {
-        authManager.removeExtraAllowedEmail(email);
-        renderAllowedEmailsList();
-        showToast(`Removed ${email} from extra allowed accounts.`);
-      });
-      chip.appendChild(textSpan);
-      chip.appendChild(removeBtn);
-      allowedEmailsChips.appendChild(chip);
-    }
-  }
-
-  if (btnAddExtraEmail && inputExtraEmail) {
-    btnAddExtraEmail.addEventListener('click', () => {
-      const res = authManager.addExtraAllowedEmail(inputExtraEmail.value);
-      if (!res.ok) {
-        showToast(res.error);
-        inputExtraEmail.focus();
-        return;
-      }
-      inputExtraEmail.value = '';
-      renderAllowedEmailsList();
-      showToast(
-        res.alreadyAllowed
-          ? `${res.email} is already authorized.`
-          : `Added ${res.email} to authorized accounts on this device!`
-      );
-    });
-  }
-
   function openParentDashboard() {
-    if (!authManager.isAuthenticated()) return;
     game.pause();
-
-    const session = authManager.getSession();
-    if (session) {
-      if (parentAuthName) parentAuthName.textContent = session.name || session.givenName || 'Family Member';
-      if (parentAuthEmail) parentAuthEmail.textContent = session.email;
-      if (parentAuthBadge) {
-        parentAuthBadge.textContent = 'Google Verified';
-        parentAuthBadge.classList.add('is-connected');
-      }
-      if (parentAuthAvatar) {
-        if (session.picture) {
-          parentAuthAvatar.src = session.picture;
-          parentAuthAvatar.referrerPolicy = 'no-referrer';
-          parentAuthAvatar.hidden = false;
-        } else {
-          parentAuthAvatar.hidden = true;
-        }
-      }
-    }
-    renderAllowedEmailsList();
-
-    const currentUrl = syncManager.getSyncUrl();
-    inputSyncUrl.value = currentUrl;
     inputWeekLabel.value = suggestNextWeekLabel();
-    updateShareSetupPreview(currentUrl);
+    renderAuthState(authManager.getSession(), null);
     updateParentSyncBadge({
-      connected: Boolean(currentUrl),
-      message: currentUrl ? 'Cloud Sync Configured' : 'Local Mode'
+      connected: authManager.isAuthenticated() && navigator.onLine !== false,
+      message: authManager.isAuthenticated()
+        ? navigator.onLine !== false
+          ? 'Firebase Connected'
+          : 'Offline (Cached)'
+        : 'Sign-In Required'
     });
     updateWeeklyCountBadge();
     renderParentWordsTable();
@@ -563,67 +520,33 @@ function initApp() {
 
   function updateParentSyncBadge(status) {
     if (!parentSyncBadge) return;
-    const hasUrl = Boolean(syncManager.getSyncUrl());
-    parentSyncBadge.classList.toggle('is-connected', Boolean(hasUrl && status.connected !== false));
+    const isAuthed = authManager.isAuthenticated();
+    parentSyncBadge.classList.toggle('is-connected', Boolean(isAuthed && status && status.connected !== false));
     if (status && status.message) {
       parentSyncBadge.textContent = status.message;
     } else {
-      parentSyncBadge.textContent = hasUrl ? 'Cloud Connected' : 'Local Mode';
+      parentSyncBadge.textContent = isAuthed ? 'Firebase Connected' : 'Sign-In Required';
     }
   }
 
-  function updateShareSetupPreview(url) {
-    const clean = String(url || '').trim();
-    if (!clean) {
-      shareSetupPanel.hidden = true;
-      return;
-    }
+  if (btnSyncNow) {
+    btnSyncNow.addEventListener('click', async () => {
+      btnSyncNow.disabled = true;
+      btnSyncNow.textContent = 'Syncing...';
+      const result = await syncManager.syncNow(6000);
+      btnSyncNow.disabled = false;
+      btnSyncNow.textContent = 'Sync Now';
 
-    const shareLink = syncManager.buildShareableSetupLink(clean);
-    inputShareLink.value = shareLink;
-    qrCodeContainer.innerHTML = generateQrCodeSvg(shareLink);
-    shareSetupPanel.hidden = false;
-  }
-
-  btnSaveSync.addEventListener('click', async () => {
-    const url = inputSyncUrl.value.trim();
-    syncManager.setSyncUrl(url);
-    updateShareSetupPreview(url);
-
-    if (!url) {
-      showToast('Switched to offline local storage mode.');
       renderParentWordsTable();
-      return;
-    }
+      refreshWelcomeMetadata();
 
-    btnSaveSync.disabled = true;
-    btnSaveSync.textContent = 'Syncing...';
-    const result = await syncManager.syncNow(6000);
-    btnSaveSync.disabled = false;
-    btnSaveSync.textContent = 'Save & Sync';
-
-    renderParentWordsTable();
-    refreshWelcomeMetadata();
-
-    if (result.ok) {
-      showToast(`Connected & synced (${result.words.length} words)!`);
-    } else {
-      showToast(`URL saved! (${result.error || 'Will sync when online'})`);
-    }
-  });
-
-  btnCopyShareLink.addEventListener('click', async () => {
-    const link = inputShareLink.value;
-    if (!link) return;
-    try {
-      await navigator.clipboard.writeText(link);
-      showToast('Tablet setup link copied to clipboard!');
-    } catch {
-      inputShareLink.select();
-      document.execCommand('copy');
-      showToast('Tablet setup link copied!');
-    }
-  });
+      if (result.ok) {
+        showToast(`Synced with Firebase (${result.words.length} words)!`);
+      } else {
+        showToast(result.error || 'Could not reach Firebase — using local words.');
+      }
+    });
+  }
 
   // Parse weekly textarea lines/commas into structured { word, custom_audio_url } entries
   function parseWeeklyTextarea(rawText) {
@@ -687,7 +610,7 @@ function initApp() {
     refreshWelcomeMetadata();
 
     if (syncRes.synced) {
-      showToast(`Added ${addedRecords.length} words for ${weekLabel} & synced to Google Sheets!`);
+      showToast(`Added ${addedRecords.length} words for ${weekLabel} & synced to Firebase!`);
     } else if (syncRes.queuedOffline) {
       showToast(`Saved ${addedRecords.length} words locally (queued to sync when online).`);
     } else {

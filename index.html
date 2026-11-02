@@ -9,7 +9,6 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='28' fill='%23DCEFF9' stroke='%239B84BE' stroke-width='4'/%3E%3Cpath d='M18 22 A16 16 0 0 1 42 18' fill='none' stroke='%23FFFDF8' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E" />
   <title>Cozy Tub Spelling — Relaxing Vocabulary &amp; SRS Game</title>
   <link rel="stylesheet" href="styles.css" />
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
   <!-- Procedural Hand-Drawn SVG Filters (feTurbulence + feDisplacementMap) -->
@@ -203,34 +202,35 @@
             onerror="this.style.display='none'"
           />
         </div>
-        <span class="storybook-kicker" id="start-week-pill">Week 1 • Cozy Bathhouse</span>
+        <span class="storybook-kicker" id="start-week-pill">Week 8 • Cozy Bathhouse</span>
         <h1 id="start-title" class="welcome-title">Cozy Tub Spelling</h1>
         <p class="welcome-subtitle" id="start-subtitle">
-          Listen to each English word and pop the floating lowercase bubbles in order!
+          Listen to each word and pop the floating lowercase bubbles in order!
         </p>
 
-        <!-- Google Login Gate (Shown when not signed in on this device) -->
-        <div id="auth-gate-box" class="auth-gate-box">
-          <p class="auth-gate-prompt">Sign in with your family Google account to unlock the game:</p>
-          <div id="google-signin-btn" class="google-signin-btn-wrap"></div>
+        <!-- Family Google Sign-In Gate (Shown until signed in on this device) -->
+        <div id="auth-gate-box" class="auth-gate-box" hidden>
+          <p class="auth-gate-prompt">Sign in once with an authorized family Google account to unlock &amp; sync:</p>
+          <div class="google-signin-btn-wrap">
+            <button type="button" id="btn-google-signin" class="primary-pastel-btn">
+              Sign in with Google
+            </button>
+          </div>
           <p id="auth-error-msg" class="auth-error-msg" hidden></p>
         </div>
 
-        <button type="button" id="btn-play" class="big-play-btn" hidden>
+        <button type="button" id="btn-play" class="big-play-btn">
           <span class="play-btn-bubble" aria-hidden="true">▶</span>
           <span id="btn-play-text">Play</span>
         </button>
 
-        <!-- Signed-in Family Member Badge -->
-        <div id="auth-user-pill" class="auth-user-pill" hidden>
-          <img id="auth-user-avatar" class="auth-user-avatar" alt="" hidden />
-          <span id="auth-user-label" class="auth-user-label"></span>
-          <button type="button" id="btn-welcome-signout" class="auth-signout-link" title="Sign out of Google">
-            Sign out
-          </button>
+        <div id="welcome-user-pill" class="auth-user-pill" hidden>
+          <img id="welcome-user-avatar" class="auth-user-avatar" alt="" hidden />
+          <span id="welcome-user-label" class="auth-user-label"></span>
+          <button type="button" id="btn-welcome-signout" class="auth-signout-link">Sign out</button>
         </div>
 
-        <p id="start-sync-note" class="welcome-sync-note">8 starter words ready • Offline friendly</p>
+        <p id="start-sync-note" class="welcome-sync-note">16 words ready • Firebase Cloud Sync</p>
       </div>
     </div>
 
@@ -285,83 +285,53 @@
       </div>
     </div>
 
-    <!-- Parent Dashboard Modal (Google Auth, Google Sheets Sync, Tablet QR/Link, Weekly Editor, SRS Table) -->
+    <!-- Parent Dashboard Modal (Firebase Auth & Cloud Firestore Sync, Weekly Editor, SRS Table) -->
     <div id="parent-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="parent-modal-title" hidden>
       <div class="parent-dashboard">
         <div class="parent-header">
           <div>
             <span class="storybook-kicker">Parent Dashboard</span>
-            <h2 id="parent-modal-title">Vocabulary &amp; Cloud Sync</h2>
+            <h2 id="parent-modal-title">Vocabulary &amp; Firebase Cloud Sync</h2>
           </div>
           <button type="button" id="btn-close-parent" class="close-modal-btn" aria-label="Close Parent Mode">✕</button>
         </div>
 
         <div class="parent-body">
-          <!-- Section 0: Family Google Account & Access Control -->
+          <!-- Section 1: Family Account & Firebase Cloud Firestore Sync -->
           <section class="parent-card">
             <div class="card-title-row">
-              <h3>Family Google Login &amp; Access</h3>
-              <span id="parent-auth-badge" class="status-badge is-connected">Signed In</span>
+              <h3>1. Family Account &amp; Firebase Cloud Sync</h3>
+              <span id="parent-sync-badge" class="status-badge">Checking...</span>
             </div>
-            <div class="parent-auth-row">
+            <p class="parent-help-text">
+              Words and Leitner Box progress sync automatically via <strong>Firebase Cloud Firestore</strong> (`hot-tub-spelling-0`) for authorized family accounts.
+            </p>
+
+            <!-- Signed-in state row -->
+            <div id="parent-auth-signed-in" class="parent-auth-row" hidden>
               <div class="parent-auth-info">
                 <img id="parent-auth-avatar" class="auth-user-avatar" alt="" hidden />
                 <div>
-                  <strong id="parent-auth-name">Family Member</strong>
-                  <div id="parent-auth-email" class="parent-help-text" style="margin: 0;"></div>
+                  <div id="parent-auth-name" class="auth-user-label"></div>
+                  <div id="parent-auth-email" class="parent-help-text" style="margin:0;"></div>
                 </div>
               </div>
-              <button type="button" id="btn-parent-signout" class="secondary-pastel-btn">Sign Out</button>
+              <div class="modal-btn-row">
+                <button type="button" id="btn-sync-now" class="primary-pastel-btn">Sync Now</button>
+                <button type="button" id="btn-parent-signout" class="secondary-pastel-btn">Sign Out</button>
+              </div>
             </div>
+
+            <!-- Signed-out state row -->
+            <div id="parent-auth-signed-out" class="parent-auth-row" hidden>
+              <span class="parent-help-text" style="margin:0;">Not signed in on this device.</span>
+              <button type="button" id="btn-parent-signin" class="primary-pastel-btn">Sign in with Google</button>
+            </div>
+
+            <!-- Authorized Family Emails Allowlist -->
             <div class="allowed-emails-box">
-              <span class="allowed-emails-label">Authorized Family Accounts:</span>
+              <span class="allowed-emails-label">Authorized Family Google Accounts:</span>
               <div id="allowed-emails-chips" class="allowed-emails-chips"></div>
-              <div class="sync-input-row" style="margin-top: 8px;">
-                <input
-                  type="email"
-                  id="input-extra-email"
-                  class="pastel-input"
-                  placeholder="Add another allowed Google email..."
-                  autocomplete="off"
-                />
-                <button type="button" id="btn-add-extra-email" class="secondary-pastel-btn">Add Email</button>
-              </div>
-            </div>
-          </section>
-
-          <!-- Section 1: Google Sheets Backend & Fire Tablet Setup Link/QR -->
-          <section class="parent-card">
-            <div class="card-title-row">
-              <h3>1. Google Sheets Cloud Sync</h3>
-              <span id="parent-sync-badge" class="status-badge">Local Mode</span>
-            </div>
-            <p class="parent-help-text">
-              Paste your deployed Google Apps Script Web App URL (<code>.../exec</code>) to sync words and Leitner Box progress across phone and Amazon Fire Tablet.
-            </p>
-            <div class="sync-input-row">
-              <input
-                type="url"
-                id="input-sync-url"
-                class="pastel-input"
-                placeholder="https://script.google.com/macros/s/.../exec"
-                autocomplete="off"
-              />
-              <button type="button" id="btn-save-sync" class="primary-pastel-btn">Save &amp; Sync</button>
-            </div>
-
-            <!-- Shareable Magic Link & Pure-SVG QR Code for Amazon Fire Tablet -->
-            <div id="share-setup-panel" class="share-setup-panel" hidden>
-              <div class="share-qr-col" id="qr-code-container"></div>
-              <div class="share-info-col">
-                <h4>One-Tap Amazon Fire Tablet Setup</h4>
-                <p class="parent-help-text">
-                  Scan this QR code or open this link once on your child’s Fire Tablet to configure its sync URL automatically:
-                </p>
-                <div class="sync-input-row">
-                  <input type="text" id="input-share-link" class="pastel-input" readonly />
-                  <button type="button" id="btn-copy-share-link" class="secondary-pastel-btn">Copy Link</button>
-                </div>
-              </div>
             </div>
           </section>
 
@@ -372,12 +342,12 @@
               <span id="weekly-word-count" class="status-badge">0 words</span>
             </div>
             <p class="parent-help-text">
-              Enter 6–10 words separated by commas or new lines. Accented words (e.g., <code>café</code>) are supported. Optional custom audio: <code>word | https://.../word.mp3</code>.
+              Enter 6–10 words separated by commas or new lines. Accented words (e.g., <code>câlin</code>, <code>café</code>) are supported. Optional custom audio: <code>word | https://.../word.mp3</code>.
             </p>
             <div class="weekly-form-grid">
               <div class="field-group">
                 <label for="input-week-label">Week Label</label>
-                <input type="text" id="input-week-label" class="pastel-input" placeholder="Week 2" />
+                <input type="text" id="input-week-label" class="pastel-input" placeholder="Week 9" />
               </div>
               <div class="field-group">
                 <label for="input-weekly-words">Words for This Week</label>
@@ -385,7 +355,7 @@
                   id="input-weekly-words"
                   class="pastel-textarea"
                   rows="3"
-                  placeholder="apple, garden, cloud, blanket, gentle, pillow, morning, smile"
+                  placeholder="câlin, singe, enfin, quinze, prince, loin, printemps"
                 ></textarea>
               </div>
               <div class="weekly-actions-row">
@@ -399,8 +369,8 @@
             <div class="card-title-row">
               <h3>3. Vocabulary &amp; SRS Progress</h3>
               <div class="srs-mini-stats">
-                <span id="stat-total-words" class="mini-stat-pill">8 total</span>
-                <span id="stat-due-words" class="mini-stat-pill due">8 due today</span>
+                <span id="stat-total-words" class="mini-stat-pill">16 total</span>
+                <span id="stat-due-words" class="mini-stat-pill due">16 due today</span>
                 <span id="stat-mastered-words" class="mini-stat-pill mastered">0 Box 4–5</span>
               </div>
             </div>

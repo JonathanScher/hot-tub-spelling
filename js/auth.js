@@ -1,17 +1,25 @@
 /**
- * Google Identity Services (GIS) Authentication & Family Allowlist Gate
+ * Firebase Authentication (Google Sign-In) & Family Allowlist Gate
  *
  * Features:
- * - Gates game access on the Welcome screen using Google Sign-In (OAuth 2.0 Web Client ID).
+ * - Authenticates with Firebase Auth (GoogleAuthProvider) so Cloud Firestore Security Rules
+ *   can verify `request.auth.token.email`.
  * - Restricts access to the family email allowlist (stored as SHA-256 hashes + optional parent additions).
- * - Persists verified login sessions in localStorage so a child's tablet stays signed in across sessions
- *   (including offline play after initial sign-in).
+ * - Persists verified login sessions in both Firebase browserLocalPersistence and localStorage
+ *   so a child's tablet stays signed in across sessions (including offline play after initial sign-in).
  */
 
-export const GOOGLE_CLIENT_ID =
-  '184637909898-fn9mmeq70sbdfn78u5890hbd3df2nksp.apps.googleusercontent.com';
+import {
+  auth,
+  googleProvider,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  onAuthStateChanged,
+  fbSignOut
+} from './firebase-config.js';
 
-const AUTH_SESSION_STORAGE_KEY = 'hottub_google_auth_session_v1';
+const AUTH_SESSION_STORAGE_KEY = 'hottub_firebase_auth_session_v1';
 const EXTRA_ALLOWED_EMAILS_KEY = 'hottub_extra_allowed_emails_v1';
 
 /**
@@ -36,8 +44,42 @@ class AuthManager {
   constructor() {
     this.session = this._loadSession();
     this.listeners = new Set();
-    this.gisInitialized = false;
-    this.gisLoadError = false;
+    this.signingIn = false;
+
+    this._initFirebaseAuthListener();
+  }
+
+  _initFirebaseAuthListener() {
+    // Handle redirect sign-in completion (used on mobile/tablet browsers if popups are blocked)
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result && result.user) {
+          this._handleFirebaseUser(result.user);
+        }
+      })
+      .catch((err) => {
+        if (err && err.code !== 'auth/popup-closed-by-user') {
+          this._emitChange({
+            type: 'auth_error',
+            message: this._friendlyAuthError(err)
+          });
+        }
+      });
+
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        this._handleFirebaseUser(user);
+      } else {
+        // If offline and we have a previously verified cached session on this tablet/phone, keep it
+        if (typeof navigator !== 'undefined' && navigator.onLine === false && this.session) {
+          this._emitChange(null);
+          return;
+        }
+        this.session = null;
+        this._clearSavedSession();
+        this._emitChange(null);
+      }
+    });
   }
 
   /**
@@ -59,7 +101,7 @@ class AuthManager {
   }
 
   /**
-   * Returns the current authenticated user session if signed in and still on the allowlist.
+   * Returns the current authenticated user session if signed in and on the allowlist.
    */
   getSession() {
     if (this.session && this.session.email) {
@@ -146,164 +188,112 @@ class AuthManager {
   }
 
   /**
-   * Initializes Google Identity Services and renders the Sign-In button into `buttonContainer`.
+   * Triggers Google Sign-In via Firebase Auth (popup with automatic fallback to redirect).
    */
-  initGoogleIdentity(buttonContainer) {
-    let attempts = 0;
-    const maxAttempts = 25; // Wait up to ~5s if script is still loading
-
-    const tryInit = () => {
-      if (typeof window !== 'undefined' && window.google && window.google.accounts && window.google.accounts.id) {
-        if (!this.gisInitialized) {
-          window.google.accounts.id.initialize({
-            client_id: GOOGLE_CLIENT_ID,
-            callback: (response) => this._handleCredentialResponse(response),
-            auto_select: true,
-            cancel_on_tap_outside: true
-          });
-          this.gisInitialized = true;
-        }
-
-        if (buttonContainer) {
-          this.renderButton(buttonContainer);
-        }
-
-        // If not yet signed in on this device, offer One Tap prompt as well
-        if (!this.isAuthenticated()) {
-          try {
-            window.google.accounts.id.prompt();
-          } catch {
-            // Ignore One Tap prompt suppression
-          }
-        }
-        return;
-      }
-
-      attempts++;
-      if (attempts < maxAttempts) {
-        setTimeout(tryInit, 200);
-      } else {
-        this.gisLoadError = true;
-        this._emitChange({
-          type: 'sdk_unavailable',
-          message:
-            navigator.onLine === false
-              ? 'Offline — connect to the internet once to sign in with Google.'
-              : 'Google Sign-In could not be loaded. Please check your connection or ad-blocker.'
-        });
-      }
-    };
-
-    tryInit();
-  }
-
-  renderButton(container) {
-    if (!container) return;
-    if (!(typeof window !== 'undefined' && window.google && window.google.accounts && window.google.accounts.id)) {
+  async signInWithGoogle() {
+    if (this.signingIn) return;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      this._emitChange({
+        type: 'offline',
+        message: 'Offline — please connect to Wi-Fi once to sign in with Google.'
+      });
       return;
     }
-    container.innerHTML = '';
+
+    this.signingIn = true;
     try {
-      window.google.accounts.id.renderButton(container, {
-        type: 'standard',
-        theme: 'outline',
-        size: 'large',
-        text: 'signin_with',
-        shape: 'pill',
-        logo_alignment: 'left',
-        width: 260
-      });
+      const result = await signInWithPopup(auth, googleProvider);
+      if (result && result.user) {
+        this._handleFirebaseUser(result.user);
+      }
     } catch (err) {
-      console.warn('Error rendering Google Sign-In button:', err);
+      const code = String((err && err.code) || '');
+      if (
+        code === 'auth/popup-blocked' ||
+        code === 'auth/operation-not-supported-in-this-environment'
+      ) {
+        try {
+          await signInWithRedirect(auth, googleProvider);
+          return;
+        } catch (redirErr) {
+          this._emitChange({
+            type: 'auth_error',
+            message: this._friendlyAuthError(redirErr)
+          });
+        }
+      } else if (code !== 'auth/popup-closed-by-user' && code !== 'auth/cancelled-popup-request') {
+        this._emitChange({
+          type: 'auth_error',
+          message: this._friendlyAuthError(err)
+        });
+      }
+    } finally {
+      this.signingIn = false;
     }
   }
 
-  /**
-   * Validates the Google ID Token (JWT) returned by Google Identity Services.
-   */
-  _handleCredentialResponse(response) {
-    if (!response || !response.credential) {
+  _handleFirebaseUser(user) {
+    const email = this.normalizeEmail(user.email);
+    if (!email) {
       this._emitChange({
         type: 'invalid_credential',
-        message: 'Sign-in cancelled or failed. Please try again.'
+        message: 'Google account did not provide a valid email address.'
       });
       return;
     }
 
-    try {
-      const payload = decodeJwtPayload(response.credential);
-      if (!payload) {
-        throw new Error('Could not decode Google credential.');
-      }
-
-      // Verify audience & issuer
-      if (payload.aud !== GOOGLE_CLIENT_ID) {
-        throw new Error('Credential audience mismatch.');
-      }
-      if (payload.iss !== 'accounts.google.com' && payload.iss !== 'https://accounts.google.com') {
-        throw new Error('Credential issuer mismatch.');
-      }
-      if (!payload.email || payload.email_verified === false) {
-        throw new Error('Google account email is not verified.');
-      }
-
-      const email = this.normalizeEmail(payload.email);
-
-      // Verify against family allowlist
-      if (!this.isEmailAllowed(email)) {
-        if (window.google && window.google.accounts && window.google.accounts.id) {
-          try {
-            window.google.accounts.id.disableAutoSelect();
-          } catch {
-            // Ignore
-          }
-        }
-        this._emitChange({
-          type: 'unauthorized_email',
-          email,
-          message: `Access restricted: "${email}" is not on the authorized family list.`
-        });
-        return;
-      }
-
-      const sessionData = {
-        sub: String(payload.sub || ''),
-        email,
-        name: String(payload.name || email.split('@')[0]),
-        givenName: String(payload.given_name || payload.name || email.split('@')[0]),
-        picture: String(payload.picture || ''),
-        idToken: String(response.credential),
-        signedInAt: new Date().toISOString()
-      };
-
-      this.session = sessionData;
-      this._saveSession(sessionData);
-      this._emitChange(null);
-    } catch (err) {
+    if (!this.isEmailAllowed(email)) {
+      fbSignOut(auth).catch(() => {});
+      this.session = null;
+      this._clearSavedSession();
       this._emitChange({
-        type: 'auth_error',
-        message: String(err && err.message ? err.message : 'Authentication error')
+        type: 'unauthorized_email',
+        email,
+        message: `Access restricted: "${email}" is not on the authorized family list.`
       });
+      return;
     }
+
+    const displayName = String(user.displayName || email.split('@')[0]);
+    const sessionData = {
+      uid: String(user.uid || ''),
+      email,
+      name: displayName,
+      givenName: displayName.split(' ')[0] || displayName,
+      picture: String(user.photoURL || ''),
+      signedInAt: new Date().toISOString()
+    };
+
+    this.session = sessionData;
+    this._saveSession(sessionData);
+    this._emitChange(null);
+  }
+
+  _friendlyAuthError(err) {
+    const code = String((err && err.code) || '');
+    if (code === 'auth/unauthorized-domain') {
+      return `Domain "${window.location.hostname}" is not yet added in Firebase Console → Authentication → Settings → Authorized domains.`;
+    }
+    if (code === 'auth/operation-not-allowed') {
+      return 'Google Sign-In is not enabled yet in Firebase Console → Authentication → Sign-in method.';
+    }
+    if (code === 'auth/network-request-failed') {
+      return 'Network error while signing in. Please check your internet connection.';
+    }
+    return String((err && err.message) || 'Could not sign in with Google. Please try again.');
   }
 
   /**
-   * Signs out the current user on this device and disables GIS auto-select.
+   * Signs out the current user from Firebase Auth and clears local session.
    */
-  signOut({ silent = false } = {}) {
+  async signOut({ silent = false } = {}) {
     this.session = null;
-    try {
-      localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
-    } catch {
-      // Ignore
-    }
+    this._clearSavedSession();
 
-    if (typeof window !== 'undefined' && window.google && window.google.accounts && window.google.accounts.id) {
-      try {
-        window.google.accounts.id.disableAutoSelect();
-      } catch {
-        // Ignore
-      }
+    try {
+      await fbSignOut(auth);
+    } catch {
+      // Ignore network sign-out error
     }
 
     if (!silent) {
@@ -334,24 +324,14 @@ class AuthManager {
       // Ignore storage quota errors
     }
   }
-}
 
-/**
- * Decodes a Base64URL-encoded JWT payload segment into a JSON object.
- */
-function decodeJwtPayload(jwt) {
-  const parts = String(jwt || '').split('.');
-  if (parts.length < 2) return null;
-  const base64Url = parts[1];
-  const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
-  const binary = atob(padded);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
+  _clearSavedSession() {
+    try {
+      localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
+    } catch {
+      // Ignore
+    }
   }
-  const jsonStr = new TextDecoder().decode(bytes);
-  return JSON.parse(jsonStr);
 }
 
 /**

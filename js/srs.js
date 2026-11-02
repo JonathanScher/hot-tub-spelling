@@ -12,8 +12,8 @@
  *   automatically when today >= next_review.
  */
 
-const WORDS_STORAGE_KEY = 'hottub_srs_words_v1';
-const CURRENT_WEEK_KEY = 'hottub_current_week_label_v1';
+const WORDS_STORAGE_KEY = 'hottub_srs_words_v2';
+const CURRENT_WEEK_KEY = 'hottub_current_week_label_v2';
 
 export const BOX_INTERVALS = {
   1: 1,
@@ -94,33 +94,61 @@ export function addDaysISO(baseIso, daysToAdd) {
 }
 
 /**
- * Default starter list of 8 kid-friendly English words so the game is
- * immediately playable out of the box before connecting Google Sheets.
+ * Initial starter word list (Week 7 & Week 8) so the game is immediately playable
+ * and seeds Cloud Firestore on first connect.
  */
 export function getDefaultStarterWords() {
   const today = getLocalISODate();
-  const starter = [
-    'water',
-    'bubble',
-    'warm',
-    'duck',
-    'soap',
-    'towel',
-    'happy',
-    'clean'
+  const week7Words = [
+    'sans',
+    'suivre',
+    'savoir',
+    'sauter',
+    'semaine',
+    'serpent',
+    'sortir',
+    'soleil',
+    'souvent'
+  ];
+  const week8Words = [
+    'câlin',
+    'singe',
+    'enfin',
+    'quinze',
+    'prince',
+    'loin',
+    'printemps'
   ];
 
-  return starter.map((word) => ({
-    word,
-    week_label: 'Week 1',
-    active: true,
-    box: 1,
-    next_review: today,
-    streak: 0,
-    total_attempts: 0,
-    correct_attempts: 0,
-    custom_audio_url: ''
-  }));
+  const records = [];
+  for (const word of week7Words) {
+    records.push({
+      word,
+      week_label: 'Week 7',
+      active: true,
+      box: 1,
+      next_review: today,
+      streak: 0,
+      total_attempts: 0,
+      correct_attempts: 0,
+      custom_audio_url: ''
+    });
+  }
+  for (const word of week8Words) {
+    records.push({
+      word,
+      week_label: 'Week 8',
+      active: true,
+      box: 1,
+      next_review: today,
+      streak: 0,
+      total_attempts: 0,
+      correct_attempts: 0,
+      custom_audio_url: ''
+    });
+  }
+
+  return records;
 }
 
 /**
@@ -136,9 +164,9 @@ export function normalizeWord(raw) {
 }
 
 /**
- * Normalizes a full word record to match the Google Sheets & LocalStorage schema.
+ * Normalizes a full word record to match the Firestore & LocalStorage schema.
  */
-export function normalizeWordRecord(raw, fallbackWeek = 'Week 1') {
+export function normalizeWordRecord(raw, fallbackWeek = 'Week 8') {
   const today = getLocalISODate();
   const word = normalizeWord(raw && raw.word ? raw.word : raw);
   const boxNum = Math.min(5, Math.max(1, parseInt(raw && raw.box, 10) || 1));
@@ -149,7 +177,6 @@ export function normalizeWordRecord(raw, fallbackWeek = 'Week 1') {
   if (raw && typeof raw.correct_attempts === 'number' && !Number.isNaN(raw.correct_attempts)) {
     correctAttempts = Math.min(totalAttempts, Math.max(0, Math.round(raw.correct_attempts)));
   } else if (totalAttempts > 0) {
-    // Estimate accurately when importing rows from 8-column Google Sheet
     correctAttempts = Math.min(totalAttempts, Math.max(streak, boxNum > 1 ? boxNum - 1 : 0));
   } else {
     correctAttempts = 0;
@@ -177,7 +204,7 @@ export function normalizeWordRecord(raw, fallbackWeek = 'Week 1') {
 }
 
 /**
- * Loads all words from localStorage, seeding the 8 starter words on first run.
+ * Loads all words from localStorage, seeding the Week 7 & Week 8 starter words on first run.
  */
 export function loadWords() {
   try {
@@ -185,7 +212,7 @@ export function loadWords() {
     if (!raw) {
       const defaults = getDefaultStarterWords();
       saveWords(defaults);
-      localStorage.setItem(CURRENT_WEEK_KEY, 'Week 1');
+      localStorage.setItem(CURRENT_WEEK_KEY, 'Week 8');
       return defaults;
     }
 
@@ -193,6 +220,7 @@ export function loadWords() {
     if (!Array.isArray(parsed) || parsed.length === 0) {
       const defaults = getDefaultStarterWords();
       saveWords(defaults);
+      localStorage.setItem(CURRENT_WEEK_KEY, 'Week 8');
       return defaults;
     }
 
@@ -209,6 +237,7 @@ export function loadWords() {
     if (cleaned.length === 0) {
       const defaults = getDefaultStarterWords();
       saveWords(defaults);
+      localStorage.setItem(CURRENT_WEEK_KEY, 'Week 8');
       return defaults;
     }
 
@@ -240,9 +269,22 @@ export function getCurrentWeekLabel(words = loadWords()) {
     return stored;
   }
   if (activeWords.length > 0) {
-    return activeWords[activeWords.length - 1].week_label;
+    // Pick highest numeric week if present, or last active week
+    let bestLabel = activeWords[activeWords.length - 1].week_label;
+    let bestNum = -1;
+    for (const w of activeWords) {
+      const m = /^week\s*(\d+)$/i.exec(String(w.week_label).trim());
+      if (m) {
+        const num = parseInt(m[1], 10);
+        if (num >= bestNum) {
+          bestNum = num;
+          bestLabel = w.week_label;
+        }
+      }
+    }
+    return bestLabel;
   }
-  return 'Week 1';
+  return 'Week 8';
 }
 
 export function setCurrentWeekLabel(weekLabel) {
@@ -252,12 +294,13 @@ export function setCurrentWeekLabel(weekLabel) {
 }
 
 /**
- * Merges remote Google Sheets rows with local storage without losing historical words
+ * Merges remote Firestore word documents with local storage without losing historical words
  * or overwriting un-synced offline local updates.
  * @param {Array} remoteRows
  * @param {Set<string>} dirtyWordsSet - Words with pending offline SRS updates
+ * @param {string} [remoteCurrentWeek] - Optional current week label from Firestore metadata
  */
-export function mergeWordsFromCloud(remoteRows, dirtyWordsSet = new Set()) {
+export function mergeWordsFromCloud(remoteRows, dirtyWordsSet = new Set(), remoteCurrentWeek = '') {
   if (!Array.isArray(remoteRows) || remoteRows.length === 0) {
     return loadWords();
   }
@@ -266,11 +309,10 @@ export function mergeWordsFromCloud(remoteRows, dirtyWordsSet = new Set()) {
   const localByWord = new Map(localWords.map((w) => [w.word, w]));
   const mergedMap = new Map();
 
-  // Keep local words if they are only starter words? Wait: if remote sheet has real words,
-  // merge remote rows while preserving any local dirty words or locally added words!
+  const starterSet = new Set(getDefaultStarterWords().map((w) => w.word));
   const localIsUntouchedStarter =
-    localWords.length === 8 &&
-    localWords.every((w) => w.total_attempts === 0 && w.week_label === 'Week 1') &&
+    localWords.length === starterSet.size &&
+    localWords.every((w) => w.total_attempts === 0 && starterSet.has(w.word)) &&
     dirtyWordsSet.size === 0;
 
   if (!localIsUntouchedStarter) {
@@ -279,11 +321,23 @@ export function mergeWordsFromCloud(remoteRows, dirtyWordsSet = new Set()) {
     }
   }
 
-  let latestRemoteWeek = '';
+  let highestWeekLabel = '';
+  let highestWeekNum = -1;
+
   for (const row of remoteRows) {
     const remoteRec = normalizeWordRecord(row);
     if (!remoteRec.word) continue;
-    latestRemoteWeek = remoteRec.week_label || latestRemoteWeek;
+
+    const m = /^week\s*(\d+)$/i.exec(String(remoteRec.week_label).trim());
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (n >= highestWeekNum) {
+        highestWeekNum = n;
+        highestWeekLabel = remoteRec.week_label;
+      }
+    } else if (!highestWeekLabel) {
+      highestWeekLabel = remoteRec.week_label;
+    }
 
     const existingLocal = localByWord.get(remoteRec.word);
     if (existingLocal && dirtyWordsSet.has(remoteRec.word)) {
@@ -297,22 +351,18 @@ export function mergeWordsFromCloud(remoteRows, dirtyWordsSet = new Set()) {
         correct_attempts: existingLocal.correct_attempts
       });
     } else {
-      // Reconcile local correct_attempts accuracy counter when total_attempts matches
-      let correctAttempts = remoteRec.correct_attempts;
-      if (existingLocal && existingLocal.total_attempts === remoteRec.total_attempts) {
-        correctAttempts = existingLocal.correct_attempts;
-      }
       mergedMap.set(remoteRec.word, {
-        ...remoteRec,
-        correct_attempts: correctAttempts
+        ...remoteRec
       });
     }
   }
 
   const mergedList = Array.from(mergedMap.values());
   saveWords(mergedList);
-  if (latestRemoteWeek) {
-    setCurrentWeekLabel(latestRemoteWeek);
+
+  const weekToUse = remoteCurrentWeek || highestWeekLabel;
+  if (weekToUse) {
+    setCurrentWeekLabel(weekToUse);
   }
   return mergedList;
 }
@@ -328,7 +378,7 @@ export function buildSessionWords(allWords = loadWords(), minWords = 8, maxWords
   const today = getLocalISODate();
   const active = allWords.filter((w) => w.active !== false && w.word && w.word.length > 0);
   if (active.length === 0) {
-    return getDefaultStarterWords();
+    return getDefaultStarterWords().slice(0, maxWords);
   }
 
   const currentWeek = getCurrentWeekLabel(active);
