@@ -1,12 +1,15 @@
 /**
- * 3-Tier English Word Pronunciation Engine (Amazon Fire Tablet / Silk Browser Compatible)
+ * 3-Tier Pronunciation Engine (Amazon Fire Tablet / Silk Browser / Mobile Compatible)
+ * Configured for Canadian French (fr-CA) with fallback to global French voices.
  *
  * Cascade Order:
  *  1. Tier 1 (Custom Audio URL): Plays optional custom_audio_url / audio_url from Google Sheets.
  *  2. Tier 2 (Dictionary API Human Audio): Fetches https://api.dictionaryapi.dev/api/v2/entries/en/<word>,
- *     extracts valid .mp3 phonetic audio URL, caches in memory, and plays via HTML5 <audio>.
- *  3. Tier 3 (Web Speech API Fallback): Uses window.speechSynthesis (lang = 'en-US', rate = 0.85)
- *     when offline or if no MP3 is available.
+ *     extracts valid .mp3 phonetic audio URL (if learning English words with French accents),
+ *     caches in memory, and plays via HTML5 <audio>.
+ *  3. Tier 3 (Web Speech API Canadian French): Uses window.speechSynthesis
+ *     prioritizing Canadian French voices (lang = 'fr-CA', rate = 0.85) such as
+ *     Microsoft Caroline/Claude/Nathalie or Google French.
  */
 
 // Minimal valid 44-byte 1-sample silent PCM WAV for gesture-unlocking HTML5 <audio> on Silk/Safari
@@ -90,7 +93,7 @@ class SpeechCascadeEngine {
         const primer = new SpeechSynthesisUtterance(' ');
         primer.volume = 0;
         primer.rate = 1;
-        primer.lang = 'en-US';
+        primer.lang = 'fr-CA';
         window.speechSynthesis.speak(primer);
       } catch {
         // Silk Browser may throw or no-op if local TTS engine is absent; Tier 1/2 cover it
@@ -160,7 +163,7 @@ class SpeechCascadeEngine {
         }
       }
 
-      // TIER 3: Web Speech API Fallback (lang = 'en-US', rate = 0.85)
+      // TIER 3: Web Speech API Canadian French (lang = 'fr-CA', rate = 0.85)
       const tier3Ok = await this._playWebSpeechFallback(cleanWord, token);
       return { played: tier3Ok, tier: tier3Ok ? 3 : 0 };
     } finally {
@@ -337,14 +340,15 @@ class SpeechCascadeEngine {
         window.speechSynthesis.cancel();
 
         const utterance = new SpeechSynthesisUtterance(cleanWord);
-        utterance.lang = 'en-US';
+        utterance.lang = 'fr-CA';
         utterance.rate = 0.85;
         utterance.pitch = 1.02;
         utterance.volume = 1.0;
 
-        const bestVoice = this._pickEnglishVoice();
+        const bestVoice = this._pickCanadianFrenchVoice();
         if (bestVoice) {
           utterance.voice = bestVoice;
+          utterance.lang = bestVoice.lang || 'fr-CA';
         }
 
         utterance.onend = () => finish(true);
@@ -357,18 +361,30 @@ class SpeechCascadeEngine {
     });
   }
 
-  _pickEnglishVoice() {
+  /**
+   * Prioritizes Canadian French (fr-CA) voices, followed by any French (fr) voice.
+   */
+  _pickCanadianFrenchVoice() {
     if (!this.voices || this.voices.length === 0) return null;
 
-    const enUsVoices = this.voices.filter((v) => /^en[-_]US/i.test(v.lang));
-    const friendlyVoice = enUsVoices.find((v) =>
-      /samantha|google us english|aria|jenny|zira|natural|female/i.test(v.name)
+    // 1. Exact Canadian French matches (fr-CA)
+    const frCaVoices = this.voices.filter((v) => /^fr[-_]CA/i.test(v.lang));
+    // Prefer friendly natural Canadian French voices if available (e.g. Caroline, Nathalie, Chantal)
+    const preferredCa = frCaVoices.find((v) =>
+      /caroline|nathalie|chantal|claude|amelie|antoine|florence|natural/i.test(v.name)
     );
-    if (friendlyVoice) return friendlyVoice;
-    if (enUsVoices.length > 0) return enUsVoices[0];
+    if (preferredCa) return preferredCa;
+    if (frCaVoices.length > 0) return frCaVoices[0];
 
-    const anyEn = this.voices.find((v) => /^en/i.test(v.lang));
-    return anyEn || null;
+    // 2. Fallback to any voice with "Canada" or "Canadian" in its name and French language
+    const caByName = this.voices.find((v) => /^fr/i.test(v.lang) && /canada|canad/i.test(v.name));
+    if (caByName) return caByName;
+
+    // 3. Fallback to any French voice (fr-FR, fr-BE, fr-CH, etc.)
+    const anyFr = this.voices.find((v) => /^fr/i.test(v.lang));
+    if (anyFr) return anyFr;
+
+    return null;
   }
 
   _normalizeUrl(url) {
