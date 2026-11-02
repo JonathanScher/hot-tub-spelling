@@ -25,10 +25,13 @@ import {
   mergeWordsFromCloud,
   loadWords,
   getCurrentWeekLabel,
-  normalizeWord
+  normalizeWord,
+  getActiveProfileId
 } from './srs.js';
 
 const DIRTY_WORDS_STORAGE_KEY = 'hottub_dirty_srs_queue_v2';
+const TEST_DIRTY_WORDS_STORAGE_KEY = 'hottub_dirty_srs_queue_v2_test';
+const TEST_PROFILE_SYNC_KEY = 'hottub_sync_test_profile_enabled_v1';
 const PENDING_WEEKLY_STORAGE_KEY = 'hottub_pending_weekly_batches_v2';
 const LAST_SYNC_STORAGE_KEY = 'hottub_last_sync_iso_v2';
 
@@ -76,20 +79,40 @@ class CloudSyncManager {
     return Boolean(auth.currentUser || authManager.isAuthenticated());
   }
 
+  isTestProfileSyncEnabled() {
+    if (typeof localStorage === 'undefined') return false;
+    return localStorage.getItem(TEST_PROFILE_SYNC_KEY) === 'true';
+  }
+
+  setTestProfileSyncEnabled(enabled) {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(TEST_PROFILE_SYNC_KEY, enabled ? 'true' : 'false');
+  }
+
   getLastSyncTime() {
     return localStorage.getItem(LAST_SYNC_STORAGE_KEY) || '';
   }
 
   /**
    * Queues a word's updated SRS progression locally and pushes immediately to Firestore if online.
+   * If in 'test' profile and test sync is disabled, acts as a safe local sandbox (skips remote sync).
+   * @param {any} wordRecord
+   * @param {string} [profileId]
    */
-  async queueWordUpdate(wordRecord) {
+  async queueWordUpdate(wordRecord, profileId) {
     if (!wordRecord || !wordRecord.word) return;
 
     const cleanWord = normalizeWord(wordRecord.word);
     if (!cleanWord) return;
 
-    const queue = this._loadDirtyMap();
+    const resolvedProfile = profileId || getActiveProfileId();
+
+    if (resolvedProfile === 'test' && !this.isTestProfileSyncEnabled()) {
+      // In local sandbox mode: do not queue to cloud or touch Firestore
+      return;
+    }
+
+    const queue = this._loadDirtyMap(resolvedProfile);
     queue[cleanWord] = {
       word: cleanWord,
       week_label: wordRecord.week_label,
@@ -102,7 +125,7 @@ class CloudSyncManager {
       custom_audio_url: wordRecord.custom_audio_url || '',
       updated_at: new Date().toISOString()
     };
-    this._saveDirtyMap(queue);
+    this._saveDirtyMap(queue, resolvedProfile);
 
     if (auth.currentUser && navigator.onLine !== false) {
       await this.flushPendingChanges();
@@ -353,7 +376,7 @@ class CloudSyncManager {
       return false;
     }
 
-    // 1. Flush pending weekly word additions
+    // 1. Flush pending weekly word additions (shared curriculum)
     const weeklyBatches = this._loadWeeklyBatches();
     if (weeklyBatches.length > 0) {
       const remaining = [];
@@ -367,43 +390,92 @@ class CloudSyncManager {
       this._saveWeeklyBatches(remaining);
     }
 
-    // 2. Flush dirty SRS word updates
-    const dirtyMap = this._loadDirtyMap();
-    const updates = Object.values(dirtyMap);
-    if (updates.length === 0) return true;
-
-    try {
-      const batch = writeBatch(db);
-      const nowIso = new Date().toISOString();
-      for (const item of updates) {
-        const cleanWord = normalizeWord(item.word);
-        if (!cleanWord) continue;
-        const wordRef = doc(db, WORDS_COLLECTION, toWordDocId(cleanWord));
-        batch.set(
-          wordRef,
-          {
-            word: cleanWord,
-            week_label: item.week_label,
-            active: item.active !== false,
-            box: item.box,
-            next_review: item.next_review,
-            streak: item.streak,
-            total_attempts: item.total_attempts,
-            correct_attempts: item.correct_attempts || 0,
-            custom_audio_url: item.custom_audio_url || '',
-            updated_at: item.updated_at || nowIso
-          },
-          { merge: true }
-        );
+    // 2. Flush dirty SRS word updates for daughter profile
+    const daughterDirty = this._loadDirtyMap('daughter');
+    const daughterUpdates = Object.values(daughterDirty);
+    let daughterSuccess = true;
+    if (daughterUpdates.length > 0) {
+      try {
+        const batch = writeBatch(db);
+        const nowIso = new Date().toISOString();
+        for (const item of daughterUpdates) {
+          const cleanWord = normalizeWord(item.word);
+          if (!cleanWord) continue;
+          const wordRef = doc(db, WORDS_COLLECTION, toWordDocId(cleanWord));
+          batch.set(
+            wordRef,
+            {
+              word: cleanWord,
+              week_label: item.week_label,
+              active: item.active !== false,
+              box: item.box,
+              next_review: item.next_review,
+              streak: item.streak,
+              total_attempts: item.total_attempts,
+              correct_attempts: item.correct_attempts || 0,
+              custom_audio_url: item.custom_audio_url || '',
+              updated_at: item.updated_at || nowIso,
+              profiles: {
+                daughter: {
+                  box: item.box,
+                  next_review: item.next_review,
+                  streak: item.streak,
+                  total_attempts: item.total_attempts,
+                  correct_attempts: item.correct_attempts || 0,
+                  updated_at: item.updated_at || nowIso
+                }
+              }
+            },
+            { merge: true }
+          );
+        }
+        await batch.commit();
+        this._saveDirtyMap({}, 'daughter');
+        this._recordSyncSuccess();
+      } catch {
+        daughterSuccess = false;
       }
-      await batch.commit();
-      this._saveDirtyMap({});
-      this._recordSyncSuccess();
-      return true;
-    } catch {
-      // Keep dirty queue intact for next online retry
-      return false;
     }
+
+    // 3. Flush dirty SRS word updates for test profile (if test sync is explicitly enabled)
+    if (this.isTestProfileSyncEnabled()) {
+      const testDirty = this._loadDirtyMap('test');
+      const testUpdates = Object.values(testDirty);
+      if (testUpdates.length > 0) {
+        try {
+          const batch = writeBatch(db);
+          const nowIso = new Date().toISOString();
+          for (const item of testUpdates) {
+            const cleanWord = normalizeWord(item.word);
+            if (!cleanWord) continue;
+            const wordRef = doc(db, WORDS_COLLECTION, toWordDocId(cleanWord));
+            batch.set(
+              wordRef,
+              {
+                word: cleanWord,
+                profiles: {
+                  test: {
+                    box: item.box,
+                    next_review: item.next_review,
+                    streak: item.streak,
+                    total_attempts: item.total_attempts,
+                    correct_attempts: item.correct_attempts || 0,
+                    updated_at: item.updated_at || nowIso
+                  }
+                }
+              },
+              { merge: true }
+            );
+          }
+          await batch.commit();
+          this._saveDirtyMap({}, 'test');
+        } catch {
+          // Keep dirty map for next retry
+        }
+      }
+    }
+
+    return daughterSuccess;
   }
 
   _friendlyFirestoreError(err) {
@@ -417,12 +489,15 @@ class CloudSyncManager {
     return String((err && err.message) || err || 'Sync error');
   }
 
-  getDirtyWordSet() {
-    return new Set(Object.keys(this._loadDirtyMap()));
+  getDirtyWordSet(profileId) {
+    const prof = profileId || getActiveProfileId();
+    return new Set(Object.keys(this._loadDirtyMap(prof)));
   }
 
   getPendingSyncCount() {
-    return Object.keys(this._loadDirtyMap()).length + this._loadWeeklyBatches().length;
+    return Object.keys(this._loadDirtyMap('daughter')).length +
+      (this.isTestProfileSyncEnabled() ? Object.keys(this._loadDirtyMap('test')).length : 0) +
+      this._loadWeeklyBatches().length;
   }
 
   _recordSyncSuccess() {
@@ -430,18 +505,20 @@ class CloudSyncManager {
     localStorage.setItem(LAST_SYNC_STORAGE_KEY, iso);
   }
 
-  _loadDirtyMap() {
+  _loadDirtyMap(profileId = 'daughter') {
     try {
-      const raw = localStorage.getItem(DIRTY_WORDS_STORAGE_KEY);
+      const key = profileId === 'test' ? TEST_DIRTY_WORDS_STORAGE_KEY : DIRTY_WORDS_STORAGE_KEY;
+      const raw = localStorage.getItem(key);
       return raw ? JSON.parse(raw) : {};
     } catch {
       return {};
     }
   }
 
-  _saveDirtyMap(map) {
+  _saveDirtyMap(map, profileId = 'daughter') {
     try {
-      localStorage.setItem(DIRTY_WORDS_STORAGE_KEY, JSON.stringify(map));
+      const key = profileId === 'test' ? TEST_DIRTY_WORDS_STORAGE_KEY : DIRTY_WORDS_STORAGE_KEY;
+      localStorage.setItem(key, JSON.stringify(map));
     } catch {
       // Ignore quota errors
     }

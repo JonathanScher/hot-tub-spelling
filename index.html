@@ -73,6 +73,18 @@
 
         <button
           type="button"
+          id="hud-profile-pill"
+          class="hud-profile-pill"
+          aria-label="Active profile: Test. Tap to switch"
+          title="Active Profile: Test / Sandbox (Daughter's data is safe)"
+          hidden
+        >
+          <span class="hud-profile-icon" aria-hidden="true">🧪</span>
+          <span class="hud-profile-label">Test Mode</span>
+        </button>
+
+        <button
+          type="button"
           id="btn-sfx-toggle"
           class="icon-pill-btn"
           aria-label="Toggle bath sound effects"
@@ -208,6 +220,18 @@
           Listen to each word and pop the floating lowercase bubbles in order!
         </p>
 
+        <!-- Learner Profile Switcher -->
+        <div class="welcome-profile-section" id="welcome-profile-section">
+          <span class="profile-section-label" id="profile-select-label">Active Learner Profile:</span>
+          <div id="welcome-profile-selector" class="profile-switcher-pill" role="radiogroup" aria-labelledby="profile-select-label">
+            <!-- Dynamic profile buttons: Daughter & Test -->
+          </div>
+          <div id="test-mode-banner" class="test-mode-banner" hidden>
+            <span class="test-banner-icon">🧪</span>
+            <span class="test-banner-text">Test Profile Active — Zoé's progress &amp; schedule are 100% safe!</span>
+          </div>
+        </div>
+
         <!-- Family Google Sign-In Gate (Shown until signed in on this device) -->
         <div id="auth-gate-box" class="auth-gate-box" hidden>
           <p class="auth-gate-prompt">Sign in once with an authorized family Google account to unlock &amp; sync:</p>
@@ -297,6 +321,67 @@
         </div>
 
         <div class="parent-body">
+          <!-- Section 0: Learner Profiles & Test Sandbox -->
+          <section class="parent-card" id="parent-card-profiles">
+            <div class="card-title-row">
+              <h3>0. Learner Profiles &amp; Test Sandbox</h3>
+              <span id="parent-active-profile-badge" class="status-badge">Active: Daughter</span>
+            </div>
+            <p class="parent-help-text">
+              Word lists and new weekly words are shared, but <strong>Leitner box progress, accuracy, and review schedules are completely separated</strong> per profile.
+            </p>
+
+            <div class="profiles-parent-grid">
+              <div class="profile-parent-column" id="col-profile-daughter">
+                <div class="profile-card-header">
+                  <span class="profile-avatar-large">👧</span>
+                  <div>
+                    <strong id="daughter-profile-name-label">Zoé</strong>
+                    <span class="profile-badge-sub">Primary Learner</span>
+                  </div>
+                </div>
+                <div class="profile-mini-stats">
+                  <span id="prof-daughter-words" class="mini-stat-pill">16 words</span>
+                  <span id="prof-daughter-due" class="mini-stat-pill due">16 due</span>
+                  <span id="prof-daughter-mastered" class="mini-stat-pill mastered">0 Box 4–5</span>
+                </div>
+                <div class="profile-card-actions">
+                  <button type="button" id="btn-select-prof-daughter" class="primary-pastel-btn">Active Profile</button>
+                  <button type="button" id="btn-rename-daughter" class="secondary-pastel-btn text-btn">Rename</button>
+                  <button type="button" id="btn-reset-daughter-progress" class="secondary-pastel-btn danger-text-btn" title="Reset all words in Zoé's profile back to Box 1">Reset Stats</button>
+                </div>
+              </div>
+
+              <div class="profile-parent-column" id="col-profile-test">
+                <div class="profile-card-header">
+                  <span class="profile-avatar-large">🧪</span>
+                  <div>
+                    <strong>Test / Sandbox</strong>
+                    <span class="profile-badge-sub">Safe for Testing</span>
+                  </div>
+                </div>
+                <div class="profile-mini-stats">
+                  <span id="prof-test-words" class="mini-stat-pill">16 words</span>
+                  <span id="prof-test-due" class="mini-stat-pill due">16 due</span>
+                  <span id="prof-test-mastered" class="mini-stat-pill mastered">0 Box 4–5</span>
+                </div>
+                <div class="profile-card-actions">
+                  <button type="button" id="btn-select-prof-test" class="secondary-pastel-btn">Switch to Test</button>
+                  <button type="button" id="btn-reset-test-progress" class="secondary-pastel-btn danger-text-btn" title="Reset all words in Test profile back to Box 1">Reset Test Stats</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Test Cloud Sync Toggle -->
+            <div class="test-sync-toggle-row">
+              <label class="toggle-checkbox-label">
+                <input type="checkbox" id="chk-test-cloud-sync" />
+                <span>Sync Test Profile to Firebase Cloud (stored safely under <code>profiles.test</code>)</span>
+              </label>
+              <p class="parent-help-subtext">When unchecked (default), Test Profile runs in safe offline sandbox mode without writing to Cloud Firestore.</p>
+            </div>
+          </section>
+
           <!-- Section 1: Family Account & Firebase Cloud Firestore Sync -->
           <section class="parent-card">
             <div class="card-title-row">

@@ -14,6 +14,248 @@
 
 export const WORDS_STORAGE_KEY = 'hottub_srs_words_v2';
 export const CURRENT_WEEK_KEY = 'hottub_current_week_label_v2';
+export const PROFILES_METADATA_KEY = 'hottub_profiles_meta_v1';
+export const ACTIVE_PROFILE_KEY = 'hottub_active_profile_v1';
+export const PROFILE_STATS_STORAGE_PREFIX = 'hottub_srs_profile_stats_v1_';
+
+/**
+ * @typedef {object} LearnerProfile
+ * @property {string} id
+ * @property {string} name
+ * @property {boolean} isTest
+ * @property {string} avatar
+ */
+
+/**
+ * @typedef {object} ProfileProgressRecord
+ * @property {number} box
+ * @property {string} next_review
+ * @property {number} streak
+ * @property {number} total_attempts
+ * @property {number} correct_attempts
+ */
+
+/** @type {LearnerProfile[]} */
+export const DEFAULT_PROFILES = [
+  { id: 'daughter', name: 'Zoé', isTest: false, avatar: '👧' },
+  { id: 'test', name: 'Test / Sandbox', isTest: true, avatar: '🧪' }
+];
+
+/**
+ * Detects whether the current execution is in a local development environment.
+ * @returns {boolean}
+ */
+export function isLocalDev() {
+  if (typeof window === 'undefined' || !window.location) return false;
+  const host = window.location.hostname;
+  return host === 'localhost' || host === '127.0.0.1' || window.location.protocol === 'file:';
+}
+
+/**
+ * Retrieves the configured learner profiles, seeding defaults if not found.
+ * @param {StorageLike} [customStorage]
+ * @returns {LearnerProfile[]}
+ */
+export function getProfiles(customStorage) {
+  const store = getStorage(customStorage);
+  try {
+    const raw = store.getItem(PROFILES_METADATA_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((p) => {
+          const id = String(p.id || 'daughter');
+          let name = String(p.name || (id === 'daughter' ? 'Zoé' : 'Test / Sandbox'));
+          if (id === 'daughter' && name === 'Daughter') {
+            name = 'Zoé';
+          }
+          return {
+            id,
+            name,
+            isTest: Boolean(p.isTest),
+            avatar: String(p.avatar || (p.isTest ? '🧪' : '👧'))
+          };
+        });
+      }
+    }
+  } catch {
+    // Fall back to defaults on parse error
+  }
+  return [...DEFAULT_PROFILES];
+}
+
+/**
+ * Resolves the active profile ID ('daughter' or 'test').
+ * In local development (localhost / 127.0.0.1), defaults to 'test' for safety
+ * unless explicitly set in storage.
+ * @param {StorageLike} [customStorage]
+ * @returns {string}
+ */
+export function getActiveProfileId(customStorage) {
+  const store = getStorage(customStorage);
+  try {
+    const stored = store.getItem(ACTIVE_PROFILE_KEY);
+    if (stored && typeof stored === 'string') {
+      const trimmed = stored.trim();
+      if (trimmed) return trimmed;
+    }
+  } catch {
+    // Ignore storage errors
+  }
+  // If running in local dev and no explicit profile saved, default to test for safety
+  if (isLocalDev()) {
+    return 'test';
+  }
+  return 'daughter';
+}
+
+/**
+ * Retrieves the active LearnerProfile object.
+ * @param {StorageLike} [customStorage]
+ * @returns {LearnerProfile}
+ */
+export function getActiveProfile(customStorage) {
+  const store = getStorage(customStorage);
+  const activeId = getActiveProfileId(store);
+  const profiles = getProfiles(store);
+  const found = profiles.find((p) => p.id === activeId);
+  if (found) return found;
+  return profiles[0] || DEFAULT_PROFILES[0];
+}
+
+/**
+ * Sets the active profile ID.
+ * @param {string} profileId
+ * @param {StorageLike} [customStorage]
+ */
+export function setActiveProfileId(profileId, customStorage) {
+  const store = getStorage(customStorage);
+  const cleanId = String(profileId || '').trim();
+  if (cleanId) {
+    store.setItem(ACTIVE_PROFILE_KEY, cleanId);
+  }
+}
+
+/**
+ * Renames a profile (e.g., customizes daughter's actual first name).
+ * @param {string} profileId
+ * @param {string} newName
+ * @param {StorageLike} [customStorage]
+ * @returns {LearnerProfile[]}
+ */
+export function updateProfileName(profileId, newName, customStorage) {
+  const store = getStorage(customStorage);
+  const profiles = getProfiles(store);
+  const target = profiles.find((p) => p.id === profileId);
+  if (target && newName && String(newName).trim()) {
+    target.name = String(newName).trim();
+    try {
+      store.setItem(PROFILES_METADATA_KEY, JSON.stringify(profiles));
+    } catch {
+      // Ignore
+    }
+  }
+  return profiles;
+}
+
+/**
+ * Loads the isolated SRS progress map for a profile: { [word]: ProfileProgressRecord }
+ * @param {string} profileId
+ * @param {StorageLike} [customStorage]
+ * @returns {Record<string, ProfileProgressRecord>}
+ */
+export function getProfileStatsMap(profileId, customStorage) {
+  const store = getStorage(customStorage);
+  try {
+    const raw = store.getItem(PROFILE_STATS_STORAGE_PREFIX + profileId);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+    }
+  } catch {
+    // Ignore
+  }
+  return {};
+}
+
+/**
+ * Saves the isolated SRS progress map for a profile.
+ * @param {string} profileId
+ * @param {Record<string, ProfileProgressRecord>} statsMap
+ * @param {StorageLike} [customStorage]
+ */
+export function saveProfileStatsMap(profileId, statsMap, customStorage) {
+  const store = getStorage(customStorage);
+  try {
+    store.setItem(PROFILE_STATS_STORAGE_PREFIX + profileId, JSON.stringify(statsMap || {}));
+  } catch (err) {
+    console.warn('Failed to save profile stats map:', err);
+  }
+}
+
+/**
+ * Resets SRS progress for a specific profile (e.g. resets 'test' back to Box 1 and 0 attempts).
+ * @param {string} profileId
+ * @param {StorageLike} [customStorage]
+ * @param {string} [todayIso]
+ * @returns {WordRecord[]} The refreshed word list for that profile
+ */
+export function resetProfileProgress(profileId, customStorage, todayIso) {
+  const store = getStorage(customStorage);
+  const today = todayIso || getLocalISODate();
+  const cleanId = String(profileId || '').trim();
+
+  if (cleanId === 'test') {
+    if (typeof store.removeItem === 'function') {
+      store.removeItem(PROFILE_STATS_STORAGE_PREFIX + 'test');
+    } else {
+      store.setItem(PROFILE_STATS_STORAGE_PREFIX + 'test', JSON.stringify({}));
+    }
+    return loadWords(store, today, 'test');
+  }
+
+  if (cleanId === 'daughter') {
+    const words = loadWords(store, today, 'daughter');
+    const reset = words.map((w) => ({
+      ...w,
+      box: 1,
+      next_review: today,
+      streak: 0,
+      total_attempts: 0,
+      correct_attempts: 0
+    }));
+    saveWords(reset, store, 'daughter');
+    return reset;
+  }
+
+  if (typeof store.removeItem === 'function') {
+    store.removeItem(PROFILE_STATS_STORAGE_PREFIX + cleanId);
+  } else {
+    store.setItem(PROFILE_STATS_STORAGE_PREFIX + cleanId, JSON.stringify({}));
+  }
+  return loadWords(store, today, cleanId);
+}
+
+/**
+ * Returns a summary of total words, due words, and mastered words for a given profile.
+ * @param {string} profileId
+ * @param {StorageLike} [customStorage]
+ * @param {string} [todayIso]
+ * @returns {{ totalWords: number, dueWords: number, masteredWords: number }}
+ */
+export function getProfileStatsSummary(profileId, customStorage, todayIso) {
+  const store = getStorage(customStorage);
+  const today = todayIso || getLocalISODate();
+  const words = loadWords(store, today, profileId).filter((w) => w.active !== false);
+
+  const totalWords = words.length;
+  const dueWords = words.filter((w) => !w.next_review || w.next_review <= today).length;
+  const masteredWords = words.filter((w) => w.box >= 4).length;
+
+  return { totalWords, dueWords, masteredWords };
+}
 
 /**
  * @typedef {object} WordRecord
@@ -280,62 +522,153 @@ export function normalizeWordRecord(raw, fallbackWeek = 'Week 8', todayIso) {
 
 /**
  * Loads all words from storage, seeding the Week 7 & Week 8 starter words on first run.
+ * Respects the active profile: if active profile is 'daughter', returns base words;
+ * if 'test' (or other), overlays the isolated profile progress map onto the shared word list.
+ *
  * @param {StorageLike} [customStorage]
  * @param {string} [todayIso]
+ * @param {string} [profileId]
  * @returns {WordRecord[]}
  */
-export function loadWords(customStorage, todayIso) {
+export function loadWords(customStorage, todayIso, profileId) {
   const store = getStorage(customStorage);
+  const resolvedProfileId = profileId || getActiveProfileId(store);
+  const today = todayIso || getLocalISODate();
+
+  let baseWords = [];
   try {
     const raw = store.getItem(WORDS_STORAGE_KEY);
     if (!raw) {
-      const defaults = getDefaultStarterWords(todayIso);
-      saveWords(defaults, store);
+      const defaults = getDefaultStarterWords(today);
+      saveWords(defaults, store, 'daughter');
       store.setItem(CURRENT_WEEK_KEY, 'Week 8');
-      return defaults;
-    }
-
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      const defaults = getDefaultStarterWords(todayIso);
-      saveWords(defaults, store);
-      store.setItem(CURRENT_WEEK_KEY, 'Week 8');
-      return defaults;
-    }
-
-    const seen = new Set();
-    const cleaned = [];
-    for (const item of parsed) {
-      const rec = normalizeWordRecord(item, 'Week 8', todayIso);
-      if (rec.word && !seen.has(rec.word)) {
-        seen.add(rec.word);
-        cleaned.push(rec);
+      baseWords = defaults;
+    } else {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        const defaults = getDefaultStarterWords(today);
+        saveWords(defaults, store, 'daughter');
+        store.setItem(CURRENT_WEEK_KEY, 'Week 8');
+        baseWords = defaults;
+      } else {
+        const seen = new Set();
+        const cleaned = [];
+        for (const item of parsed) {
+          const rec = normalizeWordRecord(item, 'Week 8', today);
+          if (rec.word && !seen.has(rec.word)) {
+            seen.add(rec.word);
+            cleaned.push(rec);
+          }
+        }
+        baseWords = cleaned.length > 0 ? cleaned : getDefaultStarterWords(today);
       }
     }
-
-    if (cleaned.length === 0) {
-      const defaults = getDefaultStarterWords(todayIso);
-      saveWords(defaults, store);
-      store.setItem(CURRENT_WEEK_KEY, 'Week 8');
-      return defaults;
-    }
-
-    return cleaned;
   } catch {
-    const defaults = getDefaultStarterWords(todayIso);
-    return defaults;
+    baseWords = getDefaultStarterWords(today);
   }
+
+  // If loading for daughter (default/production), base words hold daughter's stats directly
+  if (resolvedProfileId === 'daughter') {
+    return baseWords;
+  }
+
+  // For test profile (or custom profiles): overlay isolated profile stats onto base words
+  const profileStats = getProfileStatsMap(resolvedProfileId, store);
+  return baseWords.map((base) => {
+    const prog = profileStats[base.word];
+    if (prog) {
+      return normalizeWordRecord(
+        {
+          ...base,
+          box: prog.box,
+          next_review: prog.next_review,
+          streak: prog.streak,
+          total_attempts: prog.total_attempts,
+          correct_attempts: prog.correct_attempts
+        },
+        base.week_label,
+        today
+      );
+    }
+    // Brand new / unpracticed in this profile: fresh Box 1, due today, 0 attempts
+    return {
+      ...base,
+      box: 1,
+      next_review: today,
+      streak: 0,
+      total_attempts: 0,
+      correct_attempts: 0
+    };
+  });
 }
 
 /**
- * Saves the complete word array to storage.
+ * Saves the complete word array to storage for the specified or active profile.
+ * - For 'daughter': saves directly to WORDS_STORAGE_KEY.
+ * - For other profiles (e.g. 'test'): updates base vocabulary in WORDS_STORAGE_KEY
+ *   (word list, weeks, audio, active status) while isolating SRS stats to the profile's stats map.
+ *
  * @param {WordRecord[]} words
  * @param {StorageLike} [customStorage]
+ * @param {string} [profileId]
  */
-export function saveWords(words, customStorage) {
+export function saveWords(words, customStorage, profileId) {
   const store = getStorage(customStorage);
+  const resolvedProfileId = profileId || getActiveProfileId(store);
+
   try {
-    store.setItem(WORDS_STORAGE_KEY, JSON.stringify(words));
+    if (resolvedProfileId === 'daughter') {
+      store.setItem(WORDS_STORAGE_KEY, JSON.stringify(words));
+      return;
+    }
+
+    // For test or other profiles:
+    // 1. Save SRS stats to isolated profile map
+    const statsMap = getProfileStatsMap(resolvedProfileId, store);
+    for (const w of words) {
+      statsMap[w.word] = {
+        box: w.box,
+        next_review: w.next_review,
+        streak: w.streak,
+        total_attempts: w.total_attempts,
+        correct_attempts: w.correct_attempts
+      };
+    }
+    saveProfileStatsMap(resolvedProfileId, statsMap, store);
+
+    // 2. If new words were introduced, ensure base vocabulary in WORDS_STORAGE_KEY has them
+    // without overwriting existing daughter SRS progress for existing words
+    const existingRaw = store.getItem(WORDS_STORAGE_KEY);
+    if (existingRaw) {
+      try {
+        const existingList = JSON.parse(existingRaw);
+        if (Array.isArray(existingList)) {
+          const existingMap = new Map(existingList.map((item) => [item.word, item]));
+          let modified = false;
+          for (const w of words) {
+            if (!existingMap.has(w.word)) {
+              existingList.push({
+                word: w.word,
+                week_label: w.week_label,
+                active: w.active !== false,
+                box: 1,
+                next_review: w.next_review,
+                streak: 0,
+                total_attempts: 0,
+                correct_attempts: 0,
+                custom_audio_url: w.custom_audio_url || ''
+              });
+              modified = true;
+            }
+          }
+          if (modified) {
+            store.setItem(WORDS_STORAGE_KEY, JSON.stringify(existingList));
+          }
+        }
+      } catch {
+        // Ignore
+      }
+    }
   } catch (err) {
     console.warn('Failed to save words to localStorage:', err);
   }
@@ -395,19 +728,55 @@ export function setCurrentWeekLabel(weekLabel, customStorage) {
  * @param {string} [todayIso]
  * @returns {WordRecord[]}
  */
+/**
+ * Merges remote Firestore word documents with local storage without losing historical words
+ * or overwriting un-synced offline local updates.
+ * @param {Array<any>} remoteRows
+ * @param {Set<string>} [dirtyWordsSet] - Words with pending offline SRS updates
+ * @param {string} [remoteCurrentWeek] - Optional current week label from Firestore metadata
+ * @param {StorageLike} [customStorage]
+ * @param {string} [todayIso]
+ * @param {string} [profileId]
+ * @returns {WordRecord[]}
+ */
 export function mergeWordsFromCloud(
   remoteRows,
   dirtyWordsSet = new Set(),
   remoteCurrentWeek = '',
-  customStorage,
-  todayIso
+  customStorage = undefined,
+  todayIso = '',
+  profileId = ''
 ) {
   const store = getStorage(customStorage);
-  if (!Array.isArray(remoteRows) || remoteRows.length === 0) {
-    return loadWords(store, todayIso);
+  const resolvedProfileId = profileId || getActiveProfileId(store);
+
+  // Sync test profile stats from remote rows if present
+  if (Array.isArray(remoteRows)) {
+    const testStats = getProfileStatsMap('test', store);
+    let testModified = false;
+    for (const row of remoteRows) {
+      if (row && row.word && row.profiles && typeof row.profiles === 'object' && row.profiles.test) {
+        const pt = row.profiles.test;
+        testStats[normalizeWord(row.word)] = {
+          box: Math.min(5, Math.max(1, parseInt(String(pt.box), 10) || 1)),
+          next_review: pt.next_review || todayIso || getLocalISODate(),
+          streak: Math.max(0, parseInt(String(pt.streak), 10) || 0),
+          total_attempts: Math.max(0, parseInt(String(pt.total_attempts), 10) || 0),
+          correct_attempts: Math.max(0, parseInt(String(pt.correct_attempts), 10) || 0)
+        };
+        testModified = true;
+      }
+    }
+    if (testModified) {
+      saveProfileStatsMap('test', testStats, store);
+    }
   }
 
-  const localWords = loadWords(store, todayIso);
+  if (!Array.isArray(remoteRows) || remoteRows.length === 0) {
+    return loadWords(store, todayIso, resolvedProfileId);
+  }
+
+  const localWords = loadWords(store, todayIso, 'daughter');
   const localByWord = new Map(localWords.map((w) => [w.word, w]));
   /** @type {Map<string, WordRecord>} */
   const mergedMap = new Map();
@@ -454,20 +823,33 @@ export function mergeWordsFromCloud(
         correct_attempts: existingLocal.correct_attempts
       });
     } else {
-      mergedMap.set(remoteRec.word, {
-        ...remoteRec
-      });
+      // If remote row has explicit daughter profile progression, use it; otherwise fallback to root fields
+      const dProg = row.profiles && row.profiles.daughter;
+      if (dProg && typeof dProg === 'object') {
+        mergedMap.set(remoteRec.word, {
+          ...remoteRec,
+          box: Math.min(5, Math.max(1, parseInt(String(dProg.box), 10) || 1)),
+          next_review: dProg.next_review || remoteRec.next_review,
+          streak: Math.max(0, parseInt(String(dProg.streak), 10) || 0),
+          total_attempts: Math.max(0, parseInt(String(dProg.total_attempts), 10) || 0),
+          correct_attempts: Math.max(0, parseInt(String(dProg.correct_attempts), 10) || 0)
+        });
+      } else {
+        mergedMap.set(remoteRec.word, {
+          ...remoteRec
+        });
+      }
     }
   }
 
   const mergedList = Array.from(mergedMap.values());
-  saveWords(mergedList, store);
+  saveWords(mergedList, store, 'daughter');
 
   const weekToUse = remoteCurrentWeek || highestWeekLabel;
   if (weekToUse) {
     setCurrentWeekLabel(weekToUse, store);
   }
-  return mergedList;
+  return loadWords(store, todayIso, resolvedProfileId);
 }
 
 /**
@@ -480,14 +862,15 @@ export function mergeWordsFromCloud(
  * @param {WordRecord[]} [allWords]
  * @param {number} [minWords=8]
  * @param {number} [maxWords=10]
- * @param {{ today?: string, prng?: () => number, storage?: StorageLike }} [options]
+ * @param {{ today?: string, prng?: () => number, storage?: StorageLike, profileId?: string }} [options]
  * @returns {WordRecord[]}
  */
 export function buildSessionWords(allWords, minWords = 8, maxWords = 10, options = {}) {
   const store = getStorage(options.storage);
   const today = options.today || getLocalISODate();
   const prng = options.prng || Math.random;
-  const sourceWords = allWords !== undefined ? allWords : loadWords(store, today);
+  const profileId = options.profileId;
+  const sourceWords = allWords !== undefined ? allWords : loadWords(store, today, profileId);
 
   const active = sourceWords.filter((w) => w && w.active !== false && w.word && w.word.length > 0);
   if (active.length === 0) {
@@ -602,7 +985,7 @@ export function computeFirstAttemptSRSUpdate(current, firstAttemptErrors, todayI
  * Updates long-term Leitner Box stats based ONLY on the FIRST attempt of the word in a session.
  * @param {string} targetWord
  * @param {number} firstAttemptErrors
- * @param {{ today?: string, storage?: StorageLike }} [options]
+ * @param {{ today?: string, storage?: StorageLike, profileId?: string }} [options]
  * @returns {WordRecord | null} The updated word record
  */
 export function recordFirstAttemptSRS(targetWord, firstAttemptErrors, options = {}) {
@@ -611,13 +994,14 @@ export function recordFirstAttemptSRS(targetWord, firstAttemptErrors, options = 
 
   const store = getStorage(options.storage);
   const today = options.today || getLocalISODate();
-  const words = loadWords(store, today);
+  const profileId = options.profileId || getActiveProfileId(store);
+  const words = loadWords(store, today, profileId);
   const idx = words.findIndex((w) => w.word === clean);
   if (idx === -1) return null;
 
   const updated = computeFirstAttemptSRSUpdate(words[idx], firstAttemptErrors, today);
   words[idx] = updated;
-  saveWords(words, store);
+  saveWords(words, store, profileId);
   return updated;
 }
 
@@ -630,7 +1014,7 @@ export function recordFirstAttemptSRS(targetWord, firstAttemptErrors, options = 
 export function addWeeklyWordList(rawEntries, weekLabel, options = {}) {
   const store = getStorage(options.storage);
   const today = options.today || getLocalISODate();
-  const words = loadWords(store, today);
+  const words = loadWords(store, today, 'daughter');
   const cleanWeek = String(weekLabel || '').trim() || suggestNextWeekLabel(words, store);
   const byWord = new Map(words.map((w, i) => [w.word, i]));
   /** @type {WordRecord[]} */
@@ -676,7 +1060,7 @@ export function addWeeklyWordList(rawEntries, weekLabel, options = {}) {
   }
 
   if (addedOrUpdated.length > 0) {
-    saveWords(words, store);
+    saveWords(words, store, 'daughter');
     setCurrentWeekLabel(cleanWeek, store);
   }
 
@@ -697,10 +1081,18 @@ export function removeWordFromStore(wordToRemove, options = {}) {
   const store = getStorage(options.storage);
   const today = options.today || getLocalISODate();
   const clean = normalizeWord(wordToRemove);
-  const words = loadWords(store, today).filter((w) => w.word !== clean);
+  const words = loadWords(store, today, 'daughter').filter((w) => w.word !== clean);
   const finalWords = words.length > 0 ? words : getDefaultStarterWords(today);
-  saveWords(finalWords, store);
-  return finalWords;
+  saveWords(finalWords, store, 'daughter');
+
+  // Also clean up from test stats map if present
+  const testStats = getProfileStatsMap('test', store);
+  if (testStats[clean]) {
+    delete testStats[clean];
+    saveProfileStatsMap('test', testStats, store);
+  }
+
+  return loadWords(store, today);
 }
 
 /**

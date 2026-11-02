@@ -14,7 +14,15 @@ import {
   suggestNextWeekLabel,
   getCurrentWeekLabel,
   getLocalISODate,
-  normalizeWord
+  normalizeWord,
+  getProfiles,
+  getActiveProfileId,
+  getActiveProfile,
+  setActiveProfileId,
+  updateProfileName,
+  resetProfileProgress,
+  getProfileStatsSummary,
+  DEFAULT_PROFILES
 } from './srs.js';
 import { syncManager } from './sync.js';
 import { HotTubGame } from './game.js';
@@ -33,6 +41,28 @@ function initApp() {
   const startSyncNote = document.getElementById('start-sync-note');
   const btnPlay = document.getElementById('btn-play');
   const btnPlayText = document.getElementById('btn-play-text');
+
+  // Learner Profiles DOM References
+  const welcomeProfileSelector = document.getElementById('welcome-profile-selector');
+  const testModeBanner = document.getElementById('test-mode-banner');
+  const hudProfilePill = document.getElementById('hud-profile-pill');
+
+  const parentActiveProfileBadge = document.getElementById('parent-active-profile-badge');
+  const colProfileDaughter = document.getElementById('col-profile-daughter');
+  const colProfileTest = document.getElementById('col-profile-test');
+  const daughterProfileNameLabel = document.getElementById('daughter-profile-name-label');
+  const profDaughterWords = document.getElementById('prof-daughter-words');
+  const profDaughterDue = document.getElementById('prof-daughter-due');
+  const profDaughterMastered = document.getElementById('prof-daughter-mastered');
+  const profTestWords = document.getElementById('prof-test-words');
+  const profTestDue = document.getElementById('prof-test-due');
+  const profTestMastered = document.getElementById('prof-test-mastered');
+  const btnSelectProfDaughter = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-select-prof-daughter'));
+  const btnSelectProfTest = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-select-prof-test'));
+  const btnRenameDaughter = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-rename-daughter'));
+  const btnResetDaughterProgress = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-reset-daughter-progress'));
+  const btnResetTestProgress = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-reset-test-progress'));
+  const chkTestCloudSync = /** @type {HTMLInputElement | null} */ (document.getElementById('chk-test-cloud-sync'));
 
   // Auth Gate & User Pill on Welcome Screen
   const authGateBox = document.getElementById('auth-gate-box');
@@ -284,7 +314,167 @@ function initApp() {
     }
   });
 
-  // 5. Refresh Welcome Screen Metadata
+  // 5. Refresh Welcome Screen Metadata & Learner Profiles
+  function refreshProfileUI() {
+    const activeId = getActiveProfileId();
+    const profiles = getProfiles();
+    const activeProf = getActiveProfile();
+
+    // 1. Welcome Screen Buttons
+    if (welcomeProfileSelector) {
+      welcomeProfileSelector.innerHTML = '';
+      for (const prof of profiles) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `profile-btn ${prof.id === activeId ? 'is-active' : ''}`;
+        btn.setAttribute('aria-pressed', prof.id === activeId ? 'true' : 'false');
+        btn.setAttribute('data-profile-id', prof.id);
+        btn.innerHTML = `<span class="profile-avatar" aria-hidden="true">${escapeHtml(prof.avatar)}</span><span>${escapeHtml(prof.name)}</span>`;
+        btn.addEventListener('click', () => {
+          switchActiveProfile(prof.id);
+        });
+        welcomeProfileSelector.appendChild(btn);
+      }
+    }
+
+    if (testModeBanner) {
+      testModeBanner.hidden = activeId !== 'test';
+    }
+
+    // 2. HUD Topbar Pill
+    if (hudProfilePill) {
+      hudProfilePill.hidden = activeId !== 'test';
+    }
+
+    // 3. Parent Dashboard Profile Section
+    if (parentActiveProfileBadge) {
+      parentActiveProfileBadge.textContent = `Active: ${activeProf.name}`;
+      parentActiveProfileBadge.classList.toggle('is-connected', activeId === 'daughter');
+    }
+
+    const dStats = getProfileStatsSummary('daughter');
+    const tStats = getProfileStatsSummary('test');
+
+    const dProfile = profiles.find((p) => p.id === 'daughter') || DEFAULT_PROFILES[0];
+    if (daughterProfileNameLabel) daughterProfileNameLabel.textContent = dProfile.name;
+
+    if (profDaughterWords) profDaughterWords.textContent = `${dStats.totalWords} words`;
+    if (profDaughterDue) profDaughterDue.textContent = `${dStats.dueWords} due`;
+    if (profDaughterMastered) profDaughterMastered.textContent = `${dStats.masteredWords} Box 4–5`;
+
+    if (profTestWords) profTestWords.textContent = `${tStats.totalWords} words`;
+    if (profTestDue) profTestDue.textContent = `${tStats.dueWords} due`;
+    if (profTestMastered) profTestMastered.textContent = `${tStats.masteredWords} Box 4–5`;
+
+    if (colProfileDaughter) colProfileDaughter.classList.toggle('is-current', activeId === 'daughter');
+    if (colProfileTest) colProfileTest.classList.toggle('is-current', activeId === 'test');
+
+    if (btnSelectProfDaughter) {
+      btnSelectProfDaughter.textContent = activeId === 'daughter' ? 'Active Profile' : 'Switch to ' + dProfile.name;
+      btnSelectProfDaughter.className = activeId === 'daughter' ? 'primary-pastel-btn is-active' : 'secondary-pastel-btn';
+    }
+    if (btnSelectProfTest) {
+      btnSelectProfTest.textContent = activeId === 'test' ? 'Active Profile' : 'Switch to Test';
+      btnSelectProfTest.className = activeId === 'test' ? 'primary-pastel-btn is-active' : 'secondary-pastel-btn';
+    }
+
+    if (chkTestCloudSync) {
+      chkTestCloudSync.checked = syncManager.isTestProfileSyncEnabled();
+    }
+  }
+
+  function switchActiveProfile(profileId) {
+    setActiveProfileId(profileId);
+    const prof = getActiveProfile();
+    refreshProfileUI();
+    refreshWelcomeMetadata();
+    if (parentModal && !parentModal.hidden) {
+      renderParentWordsTable();
+    }
+    showToast(`Active profile: ${prof.name} ${prof.avatar}`);
+  }
+
+  if (hudProfilePill) {
+    hudProfilePill.addEventListener('click', () => {
+      switchActiveProfile('daughter');
+    });
+  }
+
+  if (btnSelectProfDaughter) {
+    btnSelectProfDaughter.addEventListener('click', () => {
+      switchActiveProfile('daughter');
+    });
+  }
+
+  if (btnSelectProfTest) {
+    btnSelectProfTest.addEventListener('click', () => {
+      switchActiveProfile('test');
+    });
+  }
+
+  if (btnRenameDaughter) {
+    btnRenameDaughter.addEventListener('click', () => {
+      const current = getProfiles().find((p) => p.id === 'daughter');
+      const input = window.prompt("Enter your daughter's name for this profile:", current ? current.name : 'Zoé');
+      if (input && input.trim()) {
+        updateProfileName('daughter', input.trim());
+        refreshProfileUI();
+        refreshWelcomeMetadata();
+        showToast(`Profile renamed to "${input.trim()}".`);
+      }
+    });
+  }
+
+  if (btnResetDaughterProgress) {
+    btnResetDaughterProgress.addEventListener('click', async () => {
+      const confirmed = window.confirm(
+        "Reset Zoé's progress? All words in Zoé's profile will reset to Box 1 (due today) and 0 attempts.\n\nThis will also sync to Cloud Firestore."
+      );
+      if (confirmed) {
+        const resetWords = resetProfileProgress('daughter');
+        for (const w of resetWords) {
+          syncManager.queueWordUpdate(w, 'daughter').catch(() => {});
+        }
+        if (syncManager.isCloudReady() && navigator.onLine !== false) {
+          await syncManager.flushPendingChanges();
+        }
+        refreshProfileUI();
+        if (parentModal && !parentModal.hidden) {
+          renderParentWordsTable();
+        }
+        showToast("Zoé's progress has been reset to Box 1.");
+      }
+    });
+  }
+
+  if (btnResetTestProgress) {
+    btnResetTestProgress.addEventListener('click', () => {
+      const confirmed = window.confirm(
+        'Reset Test Profile progress? All words in the Test profile will reset to Box 1 (due today) and 0 attempts.\n\nZoé’s data will NOT be touched.'
+      );
+      if (confirmed) {
+        resetProfileProgress('test');
+        refreshProfileUI();
+        if (parentModal && !parentModal.hidden) {
+          renderParentWordsTable();
+        }
+        showToast('Test profile progress reset to Box 1.');
+      }
+    });
+  }
+
+  if (chkTestCloudSync) {
+    chkTestCloudSync.addEventListener('change', () => {
+      syncManager.setTestProfileSyncEnabled(chkTestCloudSync.checked);
+      refreshProfileUI();
+      showToast(
+        chkTestCloudSync.checked
+          ? 'Test profile will sync to Firebase under profiles.test'
+          : 'Test profile will run offline (sandbox mode only).'
+      );
+    });
+  }
+
   function refreshWelcomeMetadata() {
     const words = loadWords();
     const activeWords = words.filter((w) => w.active !== false);
@@ -310,6 +500,25 @@ function initApp() {
       syncStatusDot.classList.toggle('is-online', isAuthed && navigator.onLine !== false);
     }
   }
+
+  // Ensure Zoé's profile is initialized & reset
+  const ZOE_RESET_KEY = 'hottub_zoe_profile_reset_v1';
+  function checkAndApplyZoeReset() {
+    updateProfileName('daughter', 'Zoé');
+    try {
+      if (typeof localStorage !== 'undefined' && localStorage.getItem(ZOE_RESET_KEY) !== 'done') {
+        const resetWords = resetProfileProgress('daughter');
+        for (const w of resetWords) {
+          syncManager.queueWordUpdate(w, 'daughter').catch(() => {});
+        }
+        localStorage.setItem(ZOE_RESET_KEY, 'done');
+      }
+    } catch {
+      // Ignore storage errors in restricted private contexts
+    }
+  }
+  checkAndApplyZoeReset();
+  refreshProfileUI();
   refreshWelcomeMetadata();
 
   // 6. Session Start ("Play" & "Play Again" Buttons)
@@ -490,6 +699,7 @@ function initApp() {
   function openParentDashboard() {
     game.pause();
     inputWeekLabel.value = suggestNextWeekLabel();
+    refreshProfileUI();
     renderAuthState(authManager.getSession(), null);
     updateParentSyncBadge({
       connected: authManager.isAuthenticated() && navigator.onLine !== false,
