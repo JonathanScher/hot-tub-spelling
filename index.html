@@ -343,7 +343,7 @@
                 <div class="profile-mini-stats">
                   <span id="prof-daughter-words" class="mini-stat-pill">16 words</span>
                   <span id="prof-daughter-due" class="mini-stat-pill due">16 due</span>
-                  <span id="prof-daughter-mastered" class="mini-stat-pill mastered">0 Box 4–5</span>
+                  <span id="prof-daughter-mastered" class="mini-stat-pill mastered">0 Blooming (Box 4–5)</span>
                 </div>
                 <div class="profile-card-actions">
                   <button type="button" id="btn-select-prof-daughter" class="primary-pastel-btn">Active Profile</button>
@@ -363,7 +363,7 @@
                 <div class="profile-mini-stats">
                   <span id="prof-test-words" class="mini-stat-pill">16 words</span>
                   <span id="prof-test-due" class="mini-stat-pill due">16 due</span>
-                  <span id="prof-test-mastered" class="mini-stat-pill mastered">0 Box 4–5</span>
+                  <span id="prof-test-mastered" class="mini-stat-pill mastered">0 Blooming (Box 4–5)</span>
                 </div>
                 <div class="profile-card-actions">
                   <button type="button" id="btn-select-prof-test" class="secondary-pastel-btn">Switch to Test</button>
@@ -449,14 +449,55 @@
             </div>
           </section>
 
-          <!-- Section 3: SRS Leitner Box Progress Table -->
+          <!-- Section 3: Vocabulary & Garden Growth Progress Table -->
           <section class="parent-card">
             <div class="card-title-row">
-              <h3>3. Vocabulary &amp; SRS Progress</h3>
+              <h3>3. Vocabulary &amp; Garden Growth Progress</h3>
               <div class="srs-mini-stats">
                 <span id="stat-total-words" class="mini-stat-pill">16 total</span>
                 <span id="stat-due-words" class="mini-stat-pill due">16 due today</span>
-                <span id="stat-mastered-words" class="mini-stat-pill mastered">0 Box 4–5</span>
+                <span id="stat-mastered-words" class="mini-stat-pill mastered">0 Blooming (Box 4–5)</span>
+              </div>
+            </div>
+
+            <!-- Visual Garden Growth Legend -->
+            <div class="garden-legend-card">
+              <div class="garden-legend-title">🌱 Garden Growth Stages (Spaced Repetition System)</div>
+              <div class="garden-legend-track">
+                <div class="garden-stage-step">
+                  <img src="assets/garden-stage-1.jpg" alt="Seed" class="legend-stage-img" />
+                  <span class="legend-step-num">Stage 1</span>
+                  <span class="legend-step-name">Seed</span>
+                  <span class="legend-step-interval">Daily practice</span>
+                </div>
+                <div class="garden-legend-arrow">➔</div>
+                <div class="garden-stage-step">
+                  <img src="assets/garden-stage-2.jpg" alt="Sprout" class="legend-stage-img" />
+                  <span class="legend-step-num">Stage 2</span>
+                  <span class="legend-step-name">Sprout</span>
+                  <span class="legend-step-interval">In 2 days</span>
+                </div>
+                <div class="garden-legend-arrow">➔</div>
+                <div class="garden-stage-step">
+                  <img src="assets/garden-stage-3.jpg" alt="Stem" class="legend-stage-img" />
+                  <span class="legend-step-num">Stage 3</span>
+                  <span class="legend-step-name">Stem</span>
+                  <span class="legend-step-interval">In 4 days</span>
+                </div>
+                <div class="garden-legend-arrow">➔</div>
+                <div class="garden-stage-step">
+                  <img src="assets/garden-stage-4.jpg" alt="Bud" class="legend-stage-img" />
+                  <span class="legend-step-num">Stage 4</span>
+                  <span class="legend-step-name">Bud</span>
+                  <span class="legend-step-interval">In 1 week</span>
+                </div>
+                <div class="garden-legend-arrow">➔</div>
+                <div class="garden-stage-step is-bloom">
+                  <img src="assets/garden-stage-5.jpg" alt="Bloom" class="legend-stage-img" />
+                  <span class="legend-step-num">Stage 5</span>
+                  <span class="legend-step-name">Bloom 🌻</span>
+                  <span class="legend-step-interval">Mastered (2 wks)</span>
+                </div>
               </div>
             </div>
 
@@ -466,7 +507,7 @@
                   <tr>
                     <th>Word</th>
                     <th>Week</th>
-                    <th>Leitner Box</th>
+                    <th>Garden Stage</th>
                     <th>Accuracy</th>
                     <th>Next Review</th>
                     <th>Audio</th>

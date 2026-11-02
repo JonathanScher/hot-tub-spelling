@@ -22,7 +22,9 @@ import {
   updateProfileName,
   resetProfileProgress,
   getProfileStatsSummary,
-  DEFAULT_PROFILES
+  DEFAULT_PROFILES,
+  getGardenStage,
+  GARDEN_STAGES
 } from './srs.js';
 import { syncManager } from './sync.js';
 import { HotTubGame } from './game.js';
@@ -360,11 +362,11 @@ function initApp() {
 
     if (profDaughterWords) profDaughterWords.textContent = `${dStats.totalWords} words`;
     if (profDaughterDue) profDaughterDue.textContent = `${dStats.dueWords} due`;
-    if (profDaughterMastered) profDaughterMastered.textContent = `${dStats.masteredWords} Box 4–5`;
+    if (profDaughterMastered) profDaughterMastered.textContent = `${dStats.masteredWords} Blooming (Box 4–5)`;
 
     if (profTestWords) profTestWords.textContent = `${tStats.totalWords} words`;
     if (profTestDue) profTestDue.textContent = `${tStats.dueWords} due`;
-    if (profTestMastered) profTestMastered.textContent = `${tStats.masteredWords} Box 4–5`;
+    if (profTestMastered) profTestMastered.textContent = `${tStats.masteredWords} Blooming (Box 4–5)`;
 
     if (colProfileDaughter) colProfileDaughter.classList.toggle('is-current', activeId === 'daughter');
     if (colProfileTest) colProfileTest.classList.toggle('is-current', activeId === 'test');
@@ -593,9 +595,14 @@ function initApp() {
       for (const item of summary.results) {
         const rec = allWordsByKey.get(item.word);
         const boxNum = rec ? rec.box : 1;
+        const stage = getGardenStage(boxNum);
         const chip = document.createElement('span');
         chip.className = `word-chip${item.masteredFirstTry ? '' : ' practiced'}`;
-        chip.textContent = `${item.word} • Box ${boxNum}`;
+        chip.innerHTML = `
+          <img src="${stage.icon}" class="chip-stage-img" alt="${stage.name}" />
+          <span class="chip-word">${escapeHtml(item.word)}</span>
+          <span class="chip-stage-badge">${stage.emoji} ${stage.name} (Lvl ${boxNum})</span>
+        `;
         completeWordChips.appendChild(chip);
       }
     }
@@ -837,7 +844,7 @@ function initApp() {
 
     if (statTotalWords) statTotalWords.textContent = `${activeWords.length} total`;
     if (statDueWords) statDueWords.textContent = `${dueWords.length} due today`;
-    if (statMasteredWords) statMasteredWords.textContent = `${masteredWords.length} Box 4–5`;
+    if (statMasteredWords) statMasteredWords.textContent = `${masteredWords.length} Blooming (Box 4–5)`;
 
     if (!parentWordsTbody) return;
     parentWordsTbody.innerHTML = '';
@@ -862,12 +869,19 @@ function initApp() {
         ? '<span class="due-tag">Due today</span>'
         : escapeHtml(w.next_review);
 
+      const stage = getGardenStage(w.box);
       const stars = '★'.repeat(w.box) + '☆'.repeat(Math.max(0, 5 - w.box));
 
       tr.innerHTML = `
         <td class="td-word">${escapeHtml(w.word)}</td>
         <td>${escapeHtml(w.week_label)}</td>
-        <td><span class="box-pill box-${w.box}">Box ${w.box} ${stars}</span></td>
+        <td>
+          <span class="box-pill box-${w.box}" title="Stage ${stage.level}: ${stage.name} (${stage.intervalLabel})">
+            <img src="${stage.icon}" class="pill-stage-img" alt="${stage.name}" />
+            <span class="pill-stage-name">${stage.name}</span>
+            <span class="pill-stars">${stars}</span>
+          </span>
+        </td>
         <td>${escapeHtml(accuracyText)}</td>
         <td>${reviewDisplay}</td>
         <td>

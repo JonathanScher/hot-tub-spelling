@@ -320,6 +320,27 @@ export const BOX_INTERVALS = {
   5: 14
 };
 
+/**
+ * Visual Garden Metaphor stages corresponding to Leitner Boxes 1-5
+ */
+export const GARDEN_STAGES = {
+  1: { level: 1, name: 'Seed', icon: 'assets/garden-stage-1.jpg', emoji: '🌱', intervalDays: 1, intervalLabel: 'Daily practice' },
+  2: { level: 2, name: 'Sprout', icon: 'assets/garden-stage-2.jpg', emoji: '🌿', intervalDays: 2, intervalLabel: 'In 2 days' },
+  3: { level: 3, name: 'Stem', icon: 'assets/garden-stage-3.jpg', emoji: '🪴', intervalDays: 4, intervalLabel: 'In 4 days' },
+  4: { level: 4, name: 'Bud', icon: 'assets/garden-stage-4.jpg', emoji: '🌷', intervalDays: 7, intervalLabel: 'In 1 week' },
+  5: { level: 5, name: 'Bloom', icon: 'assets/garden-stage-5.jpg', emoji: '🌻', intervalDays: 14, intervalLabel: 'In 2 weeks' }
+};
+
+/**
+ * Returns the garden growth stage for a given box number.
+ * @param {number | string} [boxNum]
+ * @returns {typeof GARDEN_STAGES[1]}
+ */
+export function getGardenStage(boxNum) {
+  const num = Math.min(5, Math.max(1, parseInt(String(boxNum), 10) || 1));
+  return GARDEN_STAGES[num] || GARDEN_STAGES[1];
+}
+
 const BASE_LOWERCASE_ALPHABET = 'abcdefghijklmnopqrstuvwxyz'.split('');
 
 /** @type {Record<string, string[]>} */
