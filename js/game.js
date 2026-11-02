@@ -73,6 +73,11 @@ export class HotTubGame {
     this.progressFill = config.progressFill || null;
     this.progressLabel = config.progressLabel || null;
     this.retryBadge = config.retryBadge || null;
+    this.progressPillEl = typeof document !== 'undefined' ? document.getElementById('session-progress-pill') : null;
+    this.tubeContainer = typeof document !== 'undefined' ? document.getElementById('progress-tube') : null;
+    this.tubeFillEl = typeof document !== 'undefined' ? document.getElementById('progress-tube-fill') : null;
+    this.duckDockEl = typeof document !== 'undefined' ? document.getElementById('progress-duck-dock') : null;
+    this.splashAnchorEl = typeof document !== 'undefined' ? document.getElementById('tube-splash-anchor') : null;
 
     this.onFirstAttemptComplete = config.onFirstAttemptComplete || (() => {});
     this.onSessionComplete = config.onSessionComplete || (() => {});
@@ -666,15 +671,22 @@ export class HotTubGame {
     }
 
     // 2. Zero-Error Mastery check & In-Session Retry re-queueing
-    if (errorsThisRound === 0) {
+    const willBeMastered = errorsThisRound === 0;
+    if (willBeMastered) {
       this.masteredCount += 1;
-      this._updateProgressPebbles();
     } else {
       // Re-queue word at the end of the current session until spelled with zero errors
       this.queue.push({
         ...this.currentWordObj,
         isRetry: true
       });
+    }
+
+    const isFinalMastery = willBeMastered && this.queue.length === 0 && this.masteredCount === this.totalUniqueWords;
+
+    if (willBeMastered) {
+      this._updateProgressPebbles();
+      this._triggerWinCelebration(isFinalMastery);
     }
 
     // 3. Celebration feedback: warm chime arpeggio, mascot celebration, and pronounce word again
@@ -684,13 +696,16 @@ export class HotTubGame {
     }
 
     const cheerList = errorsThisRound === 0 ? CHEER_MESSAGES_PERFECT : CHEER_MESSAGES_PRACTICE;
-    const msg = cheerList[Math.floor(this.prng() * cheerList.length)];
+    const msg = isFinalMastery
+      ? '🏆 Incroyable ! Toutes les bulles terminées !'
+      : cheerList[Math.floor(this.prng() * cheerList.length)];
     this.lastCheerMessage = msg;
     this._celebrateMascot(msg);
 
-    // Pronounce the full word again and pause for 2 seconds before moving to the next word
+    // Pronounce the full word again and pause before moving to the next word
+    const pauseDuration = isFinalMastery ? 3200 : 2000;
     const minPausePromise = new Promise((resolve) => {
-      this.nextWordTimeout = setTimeout(resolve, 2000);
+      this.nextWordTimeout = setTimeout(resolve, pauseDuration);
     });
     const cappedSpeechPromise = Promise.race([
       speechEngine.speakWord(this.currentWordObj).catch(() => {}),
@@ -826,26 +841,198 @@ export class HotTubGame {
   }
 
   _renderProgressPebbles() {
-    if (this.progressFill && typeof document !== 'undefined') {
-      this.progressFill.innerHTML = '';
-      for (let i = 0; i < this.totalUniqueWords; i++) {
-        const dot = document.createElement('span');
-        dot.className = 'progress-pebble';
-        this.progressFill.appendChild(dot);
+    if (typeof document !== 'undefined') {
+      if (!this.tubeFillEl) {
+        this.progressPillEl = document.getElementById('session-progress-pill');
+        this.tubeContainer = document.getElementById('progress-tube');
+        this.tubeFillEl = document.getElementById('progress-tube-fill');
+        this.duckDockEl = document.getElementById('progress-duck-dock');
+        this.splashAnchorEl = document.getElementById('tube-splash-anchor');
       }
+      if (this.progressPillEl) {
+        this.progressPillEl.classList.remove('is-grand-finale');
+      }
+      if (this.duckDockEl) {
+        this.duckDockEl.classList.remove('is-victorious', 'is-hopping');
+      }
+      if (this.progressFill) {
+        this.progressFill.innerHTML = '';
+        for (let i = 0; i < this.totalUniqueWords; i++) {
+          const dot = document.createElement('span');
+          dot.className = 'progress-tube-tick progress-pebble';
+          this.progressFill.appendChild(dot);
+        }
+      }
+      if (this.tubeContainer) {
+        this.tubeContainer.setAttribute('aria-valuemin', '0');
+        this.tubeContainer.setAttribute('aria-valuemax', String(this.totalUniqueWords));
+        this.tubeContainer.setAttribute('aria-valuenow', '0');
+      }
+      this._initDuckInteractions();
     }
     this._updateProgressPebbles();
   }
 
+  /**
+   * Enables tactile duck squish/squeak on tap for child playfulness.
+   */
+  _initDuckInteractions() {
+    if (this._duckInteractionsWired || !this.duckDockEl) return;
+    this._duckInteractionsWired = true;
+
+    this.duckDockEl.addEventListener('click', () => {
+      if (this.duckDockEl && this.duckDockEl.classList.contains('is-victorious')) return;
+      if (this.duckDockEl) {
+        this.duckDockEl.classList.remove('is-hopping');
+        void this.duckDockEl.offsetWidth;
+        this.duckDockEl.classList.add('is-hopping');
+        setTimeout(() => {
+          if (this.duckDockEl) this.duckDockEl.classList.remove('is-hopping');
+        }, 600);
+      }
+      if (soundEngine && typeof soundEngine.playDuckSqueak === 'function') {
+        soundEngine.playDuckSqueak();
+      }
+    });
+  }
+
   _updateProgressPebbles() {
+    const pct = this.totalUniqueWords > 0 ? (this.masteredCount / this.totalUniqueWords) * 100 : 0;
+    const clampedPct = Math.min(100, Math.max(0, pct));
+
     if (this.progressFill) {
       const pebbles = this.progressFill.querySelectorAll('.progress-pebble');
       pebbles.forEach((p, idx) => {
         p.classList.toggle('is-complete', idx < this.masteredCount);
       });
     }
+
+    if (this.tubeFillEl) {
+      this.tubeFillEl.style.width = `${clampedPct}%`;
+    }
+
+    if (this.tubeContainer) {
+      this.tubeContainer.setAttribute('aria-valuenow', String(this.masteredCount));
+    }
+
     if (this.progressLabel) {
       this.progressLabel.textContent = `${this.masteredCount} / ${this.totalUniqueWords}`;
+    }
+  }
+
+  /**
+   * Triggers visual & sound feedback for word mastery.
+   * Every win feels special (water surge, splash droplets, duck hop).
+   * The final win feels awesome (grand golden finale, 360° duck flip, starbursts, triumphant fanfare).
+   * @param {boolean} isFinal
+   */
+  _triggerWinCelebration(isFinal = false) {
+    if (typeof document === 'undefined') return;
+
+    const pct = this.totalUniqueWords > 0 ? (this.masteredCount / this.totalUniqueWords) * 100 : 0;
+    const clampedPct = Math.min(100, Math.max(0, pct));
+
+    if (isFinal) {
+      // THE LAST ONE: Grand Golden Duck Victory
+      if (this.progressPillEl) {
+        this.progressPillEl.classList.add('is-grand-finale');
+      }
+      if (this.duckDockEl) {
+        this.duckDockEl.classList.remove('is-hopping');
+        this.duckDockEl.classList.add('is-victorious');
+      }
+      if (this.progressLabel) {
+        this.progressLabel.classList.add('is-pulsing');
+      }
+
+      if (soundEngine && typeof soundEngine.playDuckVictory === 'function') {
+        soundEngine.playDuckVictory();
+      }
+
+      this._spawnVictoryBurst();
+    } else {
+      // EVERY WIN: Water surge, splash droplets, joyful duck hop
+      if (this.tubeContainer) {
+        this.tubeContainer.classList.remove('is-surging');
+        void this.tubeContainer.offsetWidth;
+        this.tubeContainer.classList.add('is-surging');
+        setTimeout(() => {
+          if (this.tubeContainer) this.tubeContainer.classList.remove('is-surging');
+        }, 650);
+      }
+
+      if (this.duckDockEl) {
+        this.duckDockEl.classList.remove('is-hopping');
+        void this.duckDockEl.offsetWidth;
+        this.duckDockEl.classList.add('is-hopping');
+        setTimeout(() => {
+          if (this.duckDockEl) this.duckDockEl.classList.remove('is-hopping');
+        }, 600);
+      }
+
+      if (this.progressLabel) {
+        this.progressLabel.classList.remove('is-pulsing');
+        void this.progressLabel.offsetWidth;
+        this.progressLabel.classList.add('is-pulsing');
+        setTimeout(() => {
+          if (this.progressLabel) this.progressLabel.classList.remove('is-pulsing');
+        }, 450);
+      }
+
+      if (soundEngine && typeof soundEngine.playWaterSplash === 'function') {
+        soundEngine.playWaterSplash();
+      }
+
+      this._spawnWaterSplashDroplets(clampedPct);
+    }
+  }
+
+  /**
+   * Spawns splashing water droplets from the advancing foam crest.
+   * @param {number} clampedPct
+   */
+  _spawnWaterSplashDroplets(clampedPct) {
+    if (!this.splashAnchorEl || typeof document === 'undefined') return;
+
+    for (let i = 0; i < 6; i++) {
+      const drop = document.createElement('span');
+      drop.className = 'water-splash-droplet';
+      drop.style.left = `${clampedPct}%`;
+      drop.style.top = '50%';
+      const tx = (this.prng() - 0.5) * 22;
+      const ty = -10 - this.prng() * 16;
+      drop.style.setProperty('--tx', `${tx.toFixed(1)}px`);
+      drop.style.setProperty('--ty', `${ty.toFixed(1)}px`);
+      drop.style.animationDelay = `${(i * 0.03).toFixed(2)}s`;
+      this.splashAnchorEl.appendChild(drop);
+      setTimeout(() => drop.remove(), 700);
+    }
+  }
+
+  /**
+   * Spawns golden starburst & water droplet particles radiating outward for the grand finale.
+   */
+  _spawnVictoryBurst() {
+    if (!this.splashAnchorEl || typeof document === 'undefined') return;
+
+    for (let i = 0; i < 16; i++) {
+      const p = document.createElement('span');
+      p.className = 'water-splash-droplet';
+      p.style.left = '95%';
+      p.style.top = '50%';
+      if (i % 2 === 0) {
+        p.style.background = 'radial-gradient(circle at 35% 30%, #FFFFFF 0%, #FFE072 50%, #F5C842 100%)';
+        p.style.boxShadow = '0 0 6px #FFE072';
+      }
+      const angle = (i / 16) * Math.PI * 2;
+      const dist = 18 + this.prng() * 28;
+      const tx = Math.cos(angle) * dist;
+      const ty = Math.sin(angle) * dist - 8;
+      p.style.setProperty('--tx', `${tx.toFixed(1)}px`);
+      p.style.setProperty('--ty', `${ty.toFixed(1)}px`);
+      p.style.animationDuration = '0.92s';
+      this.splashAnchorEl.appendChild(p);
+      setTimeout(() => p.remove(), 950);
     }
   }
 

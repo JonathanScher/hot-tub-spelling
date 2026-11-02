@@ -158,6 +158,9 @@ function initApp() {
     }
   });
 
+  // @ts-ignore
+  if (typeof window !== 'undefined') window.__gameInstance = game;
+
   // 1. Wire Firebase Auth State & Family Allowlist Gate
   function renderAuthState(session, errorInfo = null) {
     const isSignedIn = Boolean(session && session.email);

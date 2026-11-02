@@ -63,12 +63,66 @@
       <span class="steam-wisp wisp-5"></span>
     </div>
 
-    <!-- Top Utility Bar: Progress Pebbles, Sound Toggle, Discreet Parent Lock -->
+    <!-- Top Utility Bar: Progress Water Tube, Sound Toggle, Discreet Parent Lock -->
     <header class="hud-topbar">
       <div class="progress-pill" id="session-progress-pill" aria-label="Session word mastery progress">
-        <span class="progress-icon" aria-hidden="true">🫧</span>
-        <div id="progress-pebbles" class="progress-pebbles"></div>
-        <span id="progress-label" class="progress-label">0 / 8</span>
+        <!-- Filling Bath Tube / Canal -->
+        <div class="progress-tube" id="progress-tube" role="progressbar" aria-valuemin="0" aria-valuemax="8" aria-valuenow="0" aria-label="Water tube progress">
+          <div class="progress-tube-canal">
+            <!-- Discrete word notches along bottom bed -->
+            <div id="progress-pebbles" class="progress-tube-ticks" aria-hidden="true"></div>
+            <!-- Animated turquoise bathwater fill -->
+            <div id="progress-tube-fill" class="progress-tube-liquid" style="width: 0%;">
+              <div class="tube-specular-edge"></div>
+              <div class="tube-foam-crest"></div>
+              <div class="tube-microbubbles" aria-hidden="true">
+                <span class="mb mb-1"></span>
+                <span class="mb mb-2"></span>
+                <span class="mb mb-3"></span>
+              </div>
+            </div>
+          </div>
+          <!-- Splash particle anchor for water droplet bursts -->
+          <div id="tube-splash-anchor" class="tube-splash-anchor" aria-hidden="true"></div>
+        </div>
+
+        <!-- Golden Bath Duck Finisher -->
+        <div class="progress-duck-dock" id="progress-duck-dock" title="Golden Bath Duck">
+          <svg class="progress-duck-svg" id="progress-duck-svg" viewBox="0 0 36 36" width="34" height="34" aria-hidden="true">
+            <g class="duck-bobber">
+              <!-- Water ripple base -->
+              <ellipse cx="18" cy="30" rx="13" ry="3.2" fill="#BCE3E8" opacity="0.8" />
+              <ellipse cx="18" cy="29" rx="9" ry="2" fill="#FFFFFF" opacity="0.6" />
+              <!-- Duck Body -->
+              <path class="duck-body" d="M7 23 C7 17, 13 14, 21 16 C25 17, 28 20, 29 24 C29 27, 26 29, 20 29 C13 29, 7 27, 7 23 Z" fill="#FAD246" stroke="#4A2E1B" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              <!-- Tail upturn -->
+              <path class="duck-tail" d="M7 23 C5 21, 4 17, 7 15 C8 17, 8 19, 9 20" fill="#FAD246" stroke="#4A2E1B" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              <!-- Wing with warm golden shadow -->
+              <path class="duck-wing" d="M12 21 C14 18, 19 18, 22 21 C20 24, 15 25, 12 21 Z" fill="#F3BF26" stroke="#4A2E1B" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+              <!-- Duck Head -->
+              <circle class="duck-head" cx="23" cy="13" r="7.2" fill="#FAD246" stroke="#4A2E1B" stroke-width="1.6" />
+              <!-- Little head tuft -->
+              <path d="M22 6 C23 4, 25 4, 25 6" fill="none" stroke="#4A2E1B" stroke-width="1.4" stroke-linecap="round" />
+              <!-- Beak in warm coral / apricot -->
+              <path class="duck-beak" d="M28 13 C31 12.5, 34 14, 34 15.2 C34 16.2, 31 17, 28 16.5 Z" fill="#F07C4A" stroke="#4A2E1B" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+              <path d="M28 15 L32 15" stroke="#4A2E1B" stroke-width="1" stroke-linecap="round" />
+              <!-- Eye -->
+              <circle cx="24.8" cy="11.5" r="1.5" fill="#2C1B10" />
+              <circle cx="25.2" cy="11.1" r="0.6" fill="#FFFFFF" />
+              <!-- Cheek blush in soft pink -->
+              <ellipse cx="22.5" cy="15.2" rx="2" ry="1.2" fill="#F497A9" opacity="0.6" />
+            </g>
+          </svg>
+          <!-- Victory Sparkles & Stars -->
+          <div class="duck-victory-fx" id="duck-victory-fx" aria-hidden="true">
+            <span class="v-star star-1">✨</span>
+            <span class="v-star star-2">⭐</span>
+            <span class="v-star star-3">✨</span>
+          </div>
+        </div>
+
+        <!-- Mastered Counter Badge -->
+        <span id="progress-label" class="progress-label" aria-live="polite">0 / 8</span>
       </div>
 
       <div class="topbar-actions">

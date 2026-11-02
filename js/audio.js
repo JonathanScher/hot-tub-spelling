@@ -275,6 +275,125 @@ class SoundSynthesizer {
   }
 
   /**
+   * Playful water splash when the bath tube level surges on word completion.
+   */
+  playWaterSplash() {
+    if (!this._ensureReady()) return;
+
+    const now = this.ctx.currentTime;
+
+    // Filtered water rush swoosh
+    if (this.noiseBuffer) {
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = this.noiseBuffer;
+
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(800, now);
+      filter.frequency.exponentialRampToValueAtTime(1600, now + 0.18);
+      filter.Q.value = 2.0;
+
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(0.18, now + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.masterGain);
+      noise.start(now);
+      noise.stop(now + 0.3);
+    }
+
+    // Two playful bubbly droplet pops
+    const dropFreqs = [784, 1175];
+    dropFreqs.forEach((freq, idx) => {
+      const dropTime = now + 0.05 + idx * 0.07;
+      const osc = this.ctx.createOscillator();
+      const oscGain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq * 0.8, dropTime);
+      osc.frequency.exponentialRampToValueAtTime(freq * 1.6, dropTime + 0.08);
+
+      oscGain.gain.setValueAtTime(0.001, dropTime);
+      oscGain.gain.linearRampToValueAtTime(0.22, dropTime + 0.015);
+      oscGain.gain.exponentialRampToValueAtTime(0.001, dropTime + 0.12);
+
+      osc.connect(oscGain);
+      oscGain.connect(this.masterGain);
+      osc.start(dropTime);
+      osc.stop(dropTime + 0.13);
+    });
+  }
+
+  /**
+   * Cute, tactile rubber duck squeak when tapped or hopping.
+   */
+  playDuckSqueak() {
+    if (!this._ensureReady()) return;
+
+    const now = this.ctx.currentTime;
+    const duckOsc = this.ctx.createOscillator();
+    const duckGain = this.ctx.createGain();
+    const duckFilter = this.ctx.createBiquadFilter();
+
+    duckOsc.type = 'triangle';
+    duckOsc.frequency.setValueAtTime(560, now);
+    duckOsc.frequency.linearRampToValueAtTime(940, now + 0.08);
+    duckOsc.frequency.linearRampToValueAtTime(840, now + 0.17);
+
+    duckFilter.type = 'bandpass';
+    duckFilter.frequency.setValueAtTime(1200, now);
+    duckFilter.Q.value = 3.2;
+
+    duckGain.gain.setValueAtTime(0.001, now);
+    duckGain.gain.linearRampToValueAtTime(0.32, now + 0.02);
+    duckGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+    duckOsc.connect(duckFilter);
+    duckFilter.connect(duckGain);
+    duckGain.connect(this.masterGain);
+    duckOsc.start(now);
+    duckOsc.stop(now + 0.23);
+  }
+
+  /**
+   * Awesome victory fanfare with rubber duck squeak for session completion!
+   */
+  playDuckVictory() {
+    if (!this._ensureReady()) return;
+
+    const now = this.ctx.currentTime;
+
+    // 1. Playful Rubber Duck Squeak
+    this.playDuckSqueak();
+
+    // 2. Second little happy chirp squeak
+    const chirpTime = now + 0.14;
+    const chirpOsc = this.ctx.createOscillator();
+    const chirpGain = this.ctx.createGain();
+    chirpOsc.type = 'sine';
+    chirpOsc.frequency.setValueAtTime(880, chirpTime);
+    chirpOsc.frequency.exponentialRampToValueAtTime(1400, chirpTime + 0.08);
+
+    chirpGain.gain.setValueAtTime(0.001, chirpTime);
+    chirpGain.gain.linearRampToValueAtTime(0.25, chirpTime + 0.015);
+    chirpGain.gain.exponentialRampToValueAtTime(0.001, chirpTime + 0.14);
+
+    chirpOsc.connect(chirpGain);
+    chirpGain.connect(this.masterGain);
+    chirpOsc.start(chirpTime);
+    chirpOsc.stop(chirpTime + 0.15);
+
+    // 3. Grand Golden Chime Cascade (C5, E5, G5, C6, E6, G6)
+    const fanfareNotes = [523.25, 659.25, 783.99, 1046.50, 1318.51, 1567.98];
+    fanfareNotes.forEach((freq, idx) => {
+      const start = now + 0.24 + idx * 0.085;
+      this._playWarmBellNote(freq, start, idx >= fanfareNotes.length - 2 ? 1.25 : 0.7, 0.24);
+    });
+  }
+
+  /**
    * Gentle rising steam-chime whisper when the Hint watermark appears.
    */
   playHintWhisper() {
