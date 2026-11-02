@@ -568,6 +568,17 @@ function initApp() {
   btnPlay.addEventListener('click', () => launchNewSession(btnPlay, btnPlayText));
   btnPlayAgain.addEventListener('click', () => launchNewSession(btnPlayAgain, null));
 
+  // Designer preview shortcut (e.g. for headless testing & screenshots)
+  if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('preview')) {
+    const allWords = loadWords();
+    const sessionWords = buildSessionWords(allWords, 8, 10);
+    if (startOverlay) {
+      startOverlay.hidden = true;
+      startOverlay.classList.remove('is-active');
+    }
+    game.startSession(sessionWords, allWords);
+  }
+
   // 7. Gameplay HUD Buttons ("Listen Again" & "Hint")
   btnListen.addEventListener('click', () => {
     soundEngine.playUiTap();
