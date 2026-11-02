@@ -10,68 +10,95 @@
  * - Strict lowercase & accent character matching (tappedChar === targetChar).
  * - Watermark scaffolding triggered via Hint button (wordErrorCount++) or 2 mistakes on current letter.
  * - Zero-error mastery criterion with automatic in-session re-queueing when wordErrorCount > 0.
+ *
+ * Delegates pure state & deterministic PRNG mechanics to `js/game-core.js` (`createGameState`, `stepGame`).
  */
 
 import { soundEngine } from './audio.js';
 import { speechEngine } from './speech.js';
-import { getPlausibleDistractors } from './srs.js';
+import { createPRNG } from './prng.js';
+import {
+  MIN_BUBBLES,
+  MAX_BUBBLES,
+  SPAWN_INTERVAL_SEC,
+  CHEER_MESSAGES_PERFECT,
+  CHEER_MESSAGES_PRACTICE,
+  ensureSeededPRNG,
+  createGameState,
+  stepGame,
+  computeBubbleDiameter,
+  chooseNextBubbleCharOnState,
+  pickNonOverlappingXOnState,
+  spawnBubbleOnState,
+  useHintOnState,
+  handleBubbleTapOnState,
+  clampDeltaTime
+} from './game-core.js';
 
-const MIN_BUBBLES = 5;
-const MAX_BUBBLES = 7;
-const SPAWN_INTERVAL_SEC = 0.78;
-
-const CHEER_MESSAGES_PERFECT = [
-  'Splash-tastic!',
-  'Pure magic!',
-  'So cozy & clever!',
-  'Wonderful spelling!',
-  'Bubble master!',
-  'Spotless!'
-];
-
-const CHEER_MESSAGES_PRACTICE = [
-  'Nice job! We’ll splash it once more soon!',
-  'You built it! Let’s try again later!',
-  'Great effort! Saved for one more round!'
-];
+export {
+  MIN_BUBBLES,
+  MAX_BUBBLES,
+  SPAWN_INTERVAL_SEC,
+  CHEER_MESSAGES_PERFECT,
+  CHEER_MESSAGES_PRACTICE,
+  createGameState,
+  stepGame,
+  createPRNG
+};
 
 export class HotTubGame {
   /**
-   * @param {object} config
-   * @param {HTMLElement} config.bubbleStage - Container where bubbles float upward
-   * @param {HTMLElement} config.slotsContainer - Wooden signboard container for word letter slots
-   * @param {HTMLElement} config.flyingLayer - Overlay layer for flying popped letters & particles
-   * @param {HTMLElement} config.mascotWrap - Bath companion mascot element
-   * @param {HTMLElement} config.mascotSpeech - Mascot speech bubble element
-   * @param {HTMLElement} config.hintButton - Hint button element
-   * @param {HTMLElement} config.progressFill - Progress bar / pebbles container
-   * @param {HTMLElement} config.progressLabel - Text label e.g. "3 / 8"
-   * @param {HTMLElement} config.retryBadge - Subtle badge shown when revisiting a word in-session
-   * @param {Function} config.onFirstAttemptComplete - (wordStr, firstAttemptErrors) => void
-   * @param {Function} config.onSessionComplete - (summary) => void
+   * @param {object} [config={}]
+   * @param {HTMLElement | null} [config.bubbleStage] - Container where bubbles float upward
+   * @param {HTMLElement | null} [config.slotsContainer] - Wooden signboard container for word letter slots
+   * @param {HTMLElement | null} [config.flyingLayer] - Overlay layer for flying popped letters & particles
+   * @param {HTMLElement | null} [config.mascotWrap] - Bath companion mascot element
+   * @param {HTMLElement | null} [config.mascotSpeech] - Mascot speech bubble element
+   * @param {HTMLElement | null} [config.hintButton] - Hint button element
+   * @param {HTMLElement | null} [config.progressFill] - Progress bar / pebbles container
+   * @param {HTMLElement | null} [config.progressLabel] - Text label e.g. "3 / 8"
+   * @param {HTMLElement | null} [config.retryBadge] - Subtle badge shown when revisiting a word in-session
+   * @param {(wordStr: string, firstAttemptErrors: number) => void} [config.onFirstAttemptComplete]
+   * @param {(summary: import('./game-core.js').SessionSummary) => void} [config.onSessionComplete]
+   * @param {number} [config.seed] - Optional seed for deterministic PRNG
+   * @param {import('./prng.js').SeededPRNG | (() => number)} [config.prng] - Optional injectable PRNG
    */
-  constructor(config) {
-    this.stage = config.bubbleStage;
-    this.slotsContainer = config.slotsContainer;
-    this.flyingLayer = config.flyingLayer;
-    this.mascotWrap = config.mascotWrap;
-    this.mascotSpeech = config.mascotSpeech;
-    this.hintButton = config.hintButton;
-    this.progressFill = config.progressFill;
-    this.progressLabel = config.progressLabel;
-    this.retryBadge = config.retryBadge;
+  constructor(config = {}) {
+    this.stage = config.bubbleStage || null;
+    this.slotsContainer = config.slotsContainer || null;
+    this.flyingLayer = config.flyingLayer || null;
+    this.mascotWrap = config.mascotWrap || null;
+    this.mascotSpeech = config.mascotSpeech || null;
+    this.hintButton = config.hintButton || null;
+    this.progressFill = config.progressFill || null;
+    this.progressLabel = config.progressLabel || null;
+    this.retryBadge = config.retryBadge || null;
 
     this.onFirstAttemptComplete = config.onFirstAttemptComplete || (() => {});
     this.onSessionComplete = config.onSessionComplete || (() => {});
 
+    const initialSeed =
+      typeof config.seed === 'number'
+        ? config.seed
+        : typeof Date !== 'undefined'
+          ? Date.now() >>> 0
+          : 1;
+    this.prng = ensureSeededPRNG(config.prng, initialSeed);
+
+    /** @type {Array<any>} */
     this.allVocabWords = [];
+    /** @type {import('./game-core.js').SessionWordItem[]} */
     this.queue = [];
     this.totalUniqueWords = 0;
     this.masteredCount = 0;
+    /** @type {Set<string>} */
     this.firstAttemptRecorded = new Set();
+    /** @type {import('./game-core.js').SessionResult[]} */
     this.sessionResults = [];
 
+    /** @type {import('./game-core.js').SessionWordItem | null} */
     this.currentWordObj = null;
+    /** @type {string[]} */
     this.targetChars = [];
     this.currentIndex = 0;
     this.wordErrorCount = 0;
@@ -81,18 +108,30 @@ export class HotTubGame {
     this.running = false;
     this.paused = false;
 
+    /** @type {import('./game-core.js').BubbleEntity[]} */
     this.bubbles = [];
     this.nextBubbleId = 1;
     this.spawnCounter = 0;
     this.spawnTimer = 0;
     this.lastFrameTime = 0;
+    /** @type {number | null} */
     this.rafId = null;
+    /** @type {ReturnType<typeof setTimeout> | null} */
     this.nextWordTimeout = null;
+    /** @type {ReturnType<typeof setTimeout> | null} */
     this.mascotHideTimeout = null;
     this.bubbleImgAvailable = true;
 
+    const bounds = this._getStageBounds();
+    this.stageWidth = bounds.width;
+    this.stageHeight = bounds.height;
+    /** @type {string | null} */
+    this.lastCheerMessage = null;
+    /** @type {import('./game-core.js').SessionSummary | null} */
+    this.sessionSummary = null;
+
     this._onResize = () => this._clampBubblesToStage();
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
       window.addEventListener('resize', this._onResize);
     }
 
@@ -102,12 +141,14 @@ export class HotTubGame {
   _clampBubblesToStage() {
     if (!this.stage || this.bubbles.length === 0) return;
     const rect = this._getStageBounds();
+    this.stageWidth = rect.width;
+    this.stageHeight = rect.height;
     if (rect.width < 40) return;
     for (const b of this.bubbles) {
       const minX = b.radius + b.wobbleAmp + 8;
       const maxX = Math.max(minX + 4, rect.width - b.radius - b.wobbleAmp - 8);
       if (b.baseX > maxX || b.baseX < minX) {
-        b.baseX = minX + Math.random() * (maxX - minX);
+        b.baseX = minX + this.prng() * (maxX - minX);
         b.x = b.baseX;
         this._positionBubbleElement(b);
       }
@@ -115,6 +156,10 @@ export class HotTubGame {
   }
 
   _checkBubbleSprite() {
+    if (typeof Image === 'undefined') {
+      this.bubbleImgAvailable = true;
+      return;
+    }
     const probe = new Image();
     probe.onload = () => {
       this.bubbleImgAvailable = true;
@@ -127,8 +172,8 @@ export class HotTubGame {
 
   /**
    * Starts a new 8-10 word session.
-   * @param {Array<object>} sessionWords
-   * @param {Array<object>} allVocabularyWords
+   * @param {Array<any>} sessionWords
+   * @param {Array<any>} [allVocabularyWords]
    */
   startSession(sessionWords, allVocabularyWords = sessionWords) {
     this.stop();
@@ -139,6 +184,8 @@ export class HotTubGame {
     this.masteredCount = 0;
     this.firstAttemptRecorded.clear();
     this.sessionResults = [];
+    this.sessionSummary = null;
+    this.lastCheerMessage = null;
 
     this.running = true;
     this.paused = false;
@@ -147,8 +194,10 @@ export class HotTubGame {
     speechEngine.prefetchWords(this.queue);
 
     this._startNextWord();
-    this.lastFrameTime = performance.now();
-    this.rafId = requestAnimationFrame((ts) => this._loop(ts));
+    this.lastFrameTime = typeof performance !== 'undefined' ? performance.now() : 0;
+    if (typeof requestAnimationFrame === 'function') {
+      this.rafId = requestAnimationFrame((ts) => this._loop(ts));
+    }
   }
 
   pause() {
@@ -158,13 +207,13 @@ export class HotTubGame {
   resume() {
     if (!this.running) return;
     this.paused = false;
-    this.lastFrameTime = performance.now();
+    this.lastFrameTime = typeof performance !== 'undefined' ? performance.now() : 0;
   }
 
   stop() {
     this.running = false;
     this.paused = false;
-    if (this.rafId) {
+    if (this.rafId && typeof cancelAnimationFrame === 'function') {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
     }
@@ -195,14 +244,14 @@ export class HotTubGame {
    * Counts as an error (wordErrorCount++) for SRS & in-session retry rules.
    */
   useHintButton() {
-    if (!this.running || this.wordTransitioning || !this.currentWordObj) return;
+    const res = useHintOnState(this);
+    if (!res.activated && !res.pulsed) return;
 
-    if (!this.watermarkActive) {
-      this.wordErrorCount += 1;
+    if (res.activated) {
       soundEngine.playHintWhisper();
       this._activateWatermark();
       this._showMascotMessage('Follow the faint letters in order!', 2400);
-    } else {
+    } else if (res.pulsed) {
       // Gentle visual pulse if watermark is already showing
       soundEngine.playUiTap();
       this._pulseEmptyWatermarkSlots();
@@ -218,7 +267,8 @@ export class HotTubGame {
     }
 
     this._clearAllBubbles();
-    this.currentWordObj = this.queue.shift();
+    const nextItem = /** @type {import('./game-core.js').SessionWordItem} */ (this.queue.shift());
+    this.currentWordObj = nextItem;
     // Use Array.from to split cleanly by Unicode code point while keeping lowercase accents intact
     this.targetChars = Array.from(String(this.currentWordObj.word || '').trim().toLowerCase());
     this.currentIndex = 0;
@@ -246,12 +296,12 @@ export class HotTubGame {
     this._renderWordSlots();
     this._spawnInitialWave();
 
-    // Automatically pronounce the English word out loud at the start of each word
+    // Automatically pronounce the word out loud at the start of each word
     speechEngine.speakWord(this.currentWordObj);
   }
 
   _renderWordSlots() {
-    if (!this.slotsContainer) return;
+    if (!this.slotsContainer || typeof document === 'undefined') return;
     this.slotsContainer.innerHTML = '';
 
     const count = this.targetChars.length;
@@ -281,7 +331,9 @@ export class HotTubGame {
       slot.appendChild(watermarkSpan);
       slot.appendChild(filledSpan);
       slot.appendChild(underline);
-      this.slotsContainer.appendChild(slot);
+      if (this.slotsContainer) {
+        this.slotsContainer.appendChild(slot);
+      }
     });
   }
 
@@ -310,9 +362,10 @@ export class HotTubGame {
     if (!this.slotsContainer) return;
     const emptySlots = this.slotsContainer.querySelectorAll('.letter-slot.show-watermark');
     emptySlots.forEach((el) => {
-      el.classList.remove('watermark-pulse');
-      void el.offsetWidth;
-      el.classList.add('watermark-pulse');
+      const htmlEl = /** @type {HTMLElement} */ (el);
+      htmlEl.classList.remove('watermark-pulse');
+      void htmlEl.offsetWidth;
+      htmlEl.classList.add('watermark-pulse');
     });
   }
 
@@ -322,6 +375,8 @@ export class HotTubGame {
    */
   _spawnInitialWave() {
     const rect = this._getStageBounds();
+    this.stageWidth = rect.width;
+    this.stageHeight = rect.height;
     for (let i = 0; i < MIN_BUBBLES; i++) {
       const startY = rect.height - 20 - (MIN_BUBBLES - 1 - i) * Math.min(72, rect.height * 0.12);
       this._spawnBubble(startY);
@@ -335,132 +390,75 @@ export class HotTubGame {
    * - 70% of remaining bubbles are plausible distractor letters (including accented variants if used).
    */
   _chooseNextBubbleChar() {
-    this.spawnCounter += 1;
-    const requiredChar = this.targetChars[this.currentIndex];
-    if (!requiredChar) return 'a';
-
-    // Rule 1: Every 3rd bubble MUST be the exact next required letter
-    if (this.spawnCounter % 3 === 0) {
-      return requiredChar;
-    }
-
-    // Rule 2: 30% of remaining bubbles are future letters from the current word
-    const futureChars = this.targetChars.slice(this.currentIndex + 1);
-    if (futureChars.length > 0 && Math.random() < 0.30) {
-      return futureChars[Math.floor(Math.random() * futureChars.length)];
-    }
-
-    // Rule 3: 70% of remaining bubbles are plausible distractor letters
-    const distractors = getPlausibleDistractors(
-      requiredChar,
-      this.currentWordObj ? this.currentWordObj.word : '',
-      this.allVocabWords
-    );
-    if (distractors.length > 0) {
-      return distractors[Math.floor(Math.random() * distractors.length)];
-    }
-
-    return requiredChar === 'e' ? 'a' : 'e';
+    return chooseNextBubbleCharOnState(this);
   }
 
+  /**
+   * @param {number | null} [overrideY=null]
+   */
   _spawnBubble(overrideY = null) {
     if (!this.stage || this.wordTransitioning || this.currentIndex >= this.targetChars.length) {
       return;
     }
 
     const rect = this._getStageBounds();
+    this.stageWidth = rect.width;
+    this.stageHeight = rect.height;
     if (rect.width < 40 || rect.height < 40) return;
 
-    const diameter = this._computeBubbleDiameter(rect);
-    const radius = diameter / 2;
-    const wobbleAmp = Math.min(22, Math.max(10, rect.width * 0.028));
-    const safeMinX = radius + wobbleAmp + 10;
-    const safeMaxX = Math.max(safeMinX + 10, rect.width - radius - wobbleAmp - 10);
+    const bubbleObj = spawnBubbleOnState(this, overrideY);
+    if (!bubbleObj) return;
 
-    const startY = overrideY !== null ? overrideY : rect.height + radius * 0.55;
-    const baseX = this._pickNonOverlappingX(safeMinX, safeMaxX, startY, diameter);
-    const char = this._chooseNextBubbleChar();
+    if (typeof document !== 'undefined') {
+      const el = document.createElement('button');
+      el.type = 'button';
+      el.className = 'soap-bubble';
+      if (!this.bubbleImgAvailable) {
+        el.classList.add('use-svg-fallback');
+      }
+      el.style.width = `${bubbleObj.diameter}px`;
+      el.style.height = `${bubbleObj.diameter}px`;
+      el.setAttribute('aria-label', `Letter ${bubbleObj.char}`);
 
-    // Calm, relaxing upward speed (~7.8 to 9.8 seconds to cross full arena height)
-    const traverseSeconds = 7.8 + Math.random() * 2.0;
-    const speedY = (rect.height + diameter) / traverseSeconds;
-    const wobbleFreq = 1.35 + Math.random() * 0.75;
-    const phase = Math.random() * Math.PI * 2;
+      const innerHtml = `
+        <span class="bubble-art" aria-hidden="true"></span>
+        <span class="bubble-char">${this._escapeHtml(bubbleObj.char)}</span>
+      `;
+      el.innerHTML = innerHtml;
 
-    const el = document.createElement('button');
-    el.type = 'button';
-    el.className = 'soap-bubble';
-    if (!this.bubbleImgAvailable) {
-      el.classList.add('use-svg-fallback');
+      bubbleObj.el = el;
+
+      el.addEventListener('pointerdown', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        this._handleBubbleTap(bubbleObj);
+      });
+
+      this._positionBubbleElement(bubbleObj);
+      this.stage.appendChild(el);
     }
-    el.style.width = `${diameter}px`;
-    el.style.height = `${diameter}px`;
-    el.setAttribute('aria-label', `Letter ${char}`);
-
-    const innerHtml = `
-      <span class="bubble-art" aria-hidden="true"></span>
-      <span class="bubble-char">${this._escapeHtml(char)}</span>
-    `;
-    el.innerHTML = innerHtml;
-
-    const bubbleObj = {
-      id: this.nextBubbleId++,
-      char,
-      el,
-      baseX,
-      x: baseX,
-      y: startY,
-      diameter,
-      radius,
-      speedY,
-      wobbleAmp,
-      wobbleFreq,
-      phase,
-      age: 0,
-      state: 'floating' // 'floating' | 'popping' | 'fizzling'
-    };
-
-    el.addEventListener('pointerdown', (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      this._handleBubbleTap(bubbleObj);
-    });
-
-    this._positionBubbleElement(bubbleObj);
-    this.stage.appendChild(el);
-    this.bubbles.push(bubbleObj);
   }
 
+  /**
+   * @param {number} minX
+   * @param {number} maxX
+   * @param {number} spawnY
+   * @param {number} diameter
+   */
   _pickNonOverlappingX(minX, maxX, spawnY, diameter) {
-    const candidates = 7;
-    let bestX = minX + Math.random() * (maxX - minX);
-    let bestMinDist = -1;
-
-    for (let i = 0; i < candidates; i++) {
-      const candidateX = minX + ((i + Math.random() * 0.85) / candidates) * (maxX - minX);
-      let nearest = Infinity;
-      for (const b of this.bubbles) {
-        if (b.state !== 'floating') continue;
-        const dy = Math.abs(b.y - spawnY);
-        if (dy < diameter * 1.65) {
-          const dist = Math.hypot(b.baseX - candidateX, b.y - spawnY);
-          if (dist < nearest) nearest = dist;
-        }
-      }
-      if (nearest > bestMinDist) {
-        bestMinDist = nearest;
-        bestX = candidateX;
-      }
-    }
-
-    return Math.min(maxX, Math.max(minX, bestX));
+    return pickNonOverlappingXOnState(this, minX, maxX, spawnY, diameter);
   }
 
+  /**
+   * @param {{ width: number, height: number }} stageRect
+   */
   _computeBubbleDiameter(stageRect) {
-    const shortest = Math.min(stageRect.width, stageRect.height);
-    return Math.round(Math.min(98, Math.max(66, shortest * 0.165)));
+    return computeBubbleDiameter(stageRect);
   }
 
+  /**
+   * @param {import('./game-core.js').BubbleEntity} bubble
+   */
   _handleBubbleTap(bubble) {
     if (
       !this.running ||
@@ -483,32 +481,28 @@ export class HotTubGame {
     }
   }
 
+  /**
+   * @param {import('./game-core.js').BubbleEntity} bubble
+   */
   _onCorrectBubbleTap(bubble) {
-    bubble.state = 'popping';
-    const matchedSlotIndex = this.currentIndex;
-    const matchedChar = bubble.char;
+    const res = handleBubbleTapOnState(this, bubble);
+    if (!res.handled || !res.correct) return;
+
+    const matchedSlotIndex = /** @type {number} */ (res.matchedSlotIndex);
+    const matchedChar = /** @type {string} */ (res.matchedChar);
 
     soundEngine.playBubblePop(matchedSlotIndex);
     this._spawnPopDroplets(bubble.x, bubble.y, bubble.diameter);
 
-    bubble.el.classList.add('is-popping');
-    setTimeout(() => this._removeBubble(bubble), 220);
-
-    // Advance state immediately so fast sequential taps feel crisp and responsive
-    this.currentIndex += 1;
-    this.letterErrorCount = 0;
-
-    // Ensure next 3rd spawn cycle delivers the new required letter promptly if not already floating
-    const nextRequired = this.targetChars[this.currentIndex];
-    if (nextRequired && !this.bubbles.some((b) => b.state === 'floating' && b.char === nextRequired)) {
-      this.spawnCounter = 2; // Next spawned bubble will be spawnCounter 3 (3 % 3 === 0 -> exact next required letter!)
+    if (bubble.el) {
+      bubble.el.classList.add('is-popping');
     }
+    setTimeout(() => this._removeBubble(bubble), 220);
 
     this._animateFlyingLetterToSlot(bubble, matchedSlotIndex, matchedChar);
     this._nudgeMascotHappy();
 
-    if (this.currentIndex >= this.targetChars.length) {
-      this.wordTransitioning = true;
+    if (res.wordCompleted) {
       this._updateSlotStates();
       setTimeout(() => this._completeCurrentWord(), 340);
     } else {
@@ -516,19 +510,25 @@ export class HotTubGame {
     }
   }
 
+  /**
+   * @param {import('./game-core.js').BubbleEntity} bubble
+   */
   _onWrongBubbleTap(bubble) {
-    bubble.state = 'fizzling';
+    const res = handleBubbleTapOnState(this, bubble);
+    if (!res.handled || res.correct) return;
+
     soundEngine.playWrongFizzle();
 
-    this.wordErrorCount += 1;
-    this.letterErrorCount += 1;
-
-    bubble.el.classList.add('is-wrong-fizzle');
+    if (bubble.el) {
+      bubble.el.classList.add('is-wrong-fizzle');
+    }
     setTimeout(() => this._removeBubble(bubble), 460);
 
     // Gentle wobble feedback on current target slot
     if (this.slotsContainer) {
-      const currentSlot = this.slotsContainer.querySelector(`.letter-slot[data-index="${this.currentIndex}"]`);
+      const currentSlot = /** @type {HTMLElement | null} */ (
+        this.slotsContainer.querySelector(`.letter-slot[data-index="${this.currentIndex}"]`)
+      );
       if (currentSlot) {
         currentSlot.classList.remove('slot-gentle-shake');
         void currentSlot.offsetWidth;
@@ -537,19 +537,24 @@ export class HotTubGame {
     }
 
     // Trigger watermark scaffolding automatically after 2 mistakes on the current letter
-    if (this.letterErrorCount >= 2 && !this.watermarkActive) {
+    if (res.autoWatermarkTriggered) {
       soundEngine.playHintWhisper();
       this._activateWatermark();
       this._showMascotMessage('Here is a gentle hint in the slots!', 2400);
     }
   }
 
+  /**
+   * @param {import('./game-core.js').BubbleEntity} bubble
+   * @param {number} slotIndex
+   * @param {string} char
+   */
   _animateFlyingLetterToSlot(bubble, slotIndex, char) {
     const slotEl = this.slotsContainer
       ? this.slotsContainer.querySelector(`.letter-slot[data-index="${slotIndex}"]`)
       : null;
 
-    if (!slotEl || !this.flyingLayer) {
+    if (!slotEl || !this.flyingLayer || !bubble.el || typeof document === 'undefined') {
       this._fillSlotText(slotIndex, char);
       return;
     }
@@ -569,12 +574,14 @@ export class HotTubGame {
     flyer.style.transform = `translate3d(${startX}px, ${startY}px, 0) translate(-50%, -50%) scale(1.15)`;
     this.flyingLayer.appendChild(flyer);
 
-    requestAnimationFrame(() => {
+    if (typeof requestAnimationFrame === 'function') {
       requestAnimationFrame(() => {
-        flyer.style.transform = `translate3d(${endX}px, ${endY}px, 0) translate(-50%, -50%) scale(0.95)`;
-        flyer.style.opacity = '0.92';
+        requestAnimationFrame(() => {
+          flyer.style.transform = `translate3d(${endX}px, ${endY}px, 0) translate(-50%, -50%) scale(0.95)`;
+          flyer.style.opacity = '0.92';
+        });
       });
-    });
+    }
 
     setTimeout(() => {
       flyer.remove();
@@ -582,6 +589,10 @@ export class HotTubGame {
     }, 300);
   }
 
+  /**
+   * @param {number} slotIndex
+   * @param {string} char
+   */
   _fillSlotText(slotIndex, char) {
     if (!this.slotsContainer) return;
     const slotEl = this.slotsContainer.querySelector(`.letter-slot[data-index="${slotIndex}"]`);
@@ -596,14 +607,19 @@ export class HotTubGame {
     setTimeout(() => slotEl.classList.remove('just-landed'), 420);
   }
 
+  /**
+   * @param {number} cx
+   * @param {number} cy
+   * @param {number} diameter
+   */
   _spawnPopDroplets(cx, cy, diameter) {
-    if (!this.stage) return;
+    if (!this.stage || typeof document === 'undefined') return;
     const count = 7;
     const colors = ['#BCE0F2', '#F6B8AD', '#D8CEE8', '#FFF6E6', '#B8DEC8'];
 
     for (let i = 0; i < count; i++) {
-      const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.4;
-      const dist = diameter * (0.45 + Math.random() * 0.35);
+      const angle = (Math.PI * 2 * i) / count + (this.prng() - 0.5) * 0.4;
+      const dist = diameter * (0.45 + this.prng() * 0.35);
       const dx = Math.cos(angle) * dist;
       const dy = Math.sin(angle) * dist;
 
@@ -631,7 +647,9 @@ export class HotTubGame {
     for (const b of [...this.bubbles]) {
       if (b.state === 'floating') {
         b.state = 'popping';
-        b.el.classList.add('is-gentle-fade');
+        if (b.el) {
+          b.el.classList.add('is-gentle-fade');
+        }
         setTimeout(() => this._removeBubble(b), 350);
       }
     }
@@ -666,7 +684,8 @@ export class HotTubGame {
     }
 
     const cheerList = errorsThisRound === 0 ? CHEER_MESSAGES_PERFECT : CHEER_MESSAGES_PRACTICE;
-    const msg = cheerList[Math.floor(Math.random() * cheerList.length)];
+    const msg = cheerList[Math.floor(this.prng() * cheerList.length)];
+    this.lastCheerMessage = msg;
     this._celebrateMascot(msg);
 
     // Pronounce the full word again and pause for 2 seconds before moving to the next word
@@ -690,7 +709,7 @@ export class HotTubGame {
 
   _finishSession() {
     this.running = false;
-    if (this.rafId) {
+    if (this.rafId && typeof cancelAnimationFrame === 'function') {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
     }
@@ -698,28 +717,38 @@ export class HotTubGame {
     soundEngine.playSessionComplete();
 
     const firstTryPerfect = this.sessionResults.filter((r) => r.masteredFirstTry).length;
-    this.onSessionComplete({
+    const summary = {
       totalWords: this.totalUniqueWords,
       firstTryPerfect,
       results: this.sessionResults
-    });
+    };
+    this.sessionSummary = summary;
+    this.onSessionComplete(summary);
   }
 
+  /**
+   * @param {number} timestamp
+   */
   _loop(timestamp) {
     if (!this.running) return;
 
     const rawDt = (timestamp - this.lastFrameTime) / 1000;
     this.lastFrameTime = timestamp;
-    const dt = Math.min(0.05, Math.max(0, rawDt));
+    const dt = clampDeltaTime(rawDt);
 
     if (!this.paused && !this.wordTransitioning) {
       this._updateBubbles(dt);
       this._maintainBubblePopulation(dt);
     }
 
-    this.rafId = requestAnimationFrame((ts) => this._loop(ts));
+    if (typeof requestAnimationFrame === 'function') {
+      this.rafId = requestAnimationFrame((ts) => this._loop(ts));
+    }
   }
 
+  /**
+   * @param {number} dt
+   */
   _updateBubbles(dt) {
     const toRemove = [];
 
@@ -734,7 +763,9 @@ export class HotTubGame {
       if (b.y < -b.radius * 0.35) {
         toRemove.push(b);
       } else if (b.y < b.radius * 0.45) {
-        b.el.classList.add('is-top-fading');
+        if (b.el) {
+          b.el.classList.add('is-top-fading');
+        }
         this._positionBubbleElement(b);
       } else {
         this._positionBubbleElement(b);
@@ -746,6 +777,9 @@ export class HotTubGame {
     }
   }
 
+  /**
+   * @param {number} dt
+   */
   _maintainBubblePopulation(dt) {
     const activeCount = this.bubbles.filter((b) => b.state === 'floating').length;
     this.spawnTimer += dt;
@@ -759,12 +793,19 @@ export class HotTubGame {
     }
   }
 
+  /**
+   * @param {import('./game-core.js').BubbleEntity} b
+   */
   _positionBubbleElement(b) {
+    if (!b.el) return;
     const left = b.x - b.radius;
     const top = b.y - b.radius;
     b.el.style.transform = `translate3d(${left.toFixed(1)}px, ${top.toFixed(1)}px, 0)`;
   }
 
+  /**
+   * @param {import('./game-core.js').BubbleEntity} bubble
+   */
   _removeBubble(bubble) {
     const idx = this.bubbles.indexOf(bubble);
     if (idx !== -1) {
@@ -785,7 +826,7 @@ export class HotTubGame {
   }
 
   _renderProgressPebbles() {
-    if (this.progressFill) {
+    if (this.progressFill && typeof document !== 'undefined') {
       this.progressFill.innerHTML = '';
       for (let i = 0; i < this.totalUniqueWords; i++) {
         const dot = document.createElement('span');
@@ -815,6 +856,9 @@ export class HotTubGame {
     this.mascotWrap.classList.add('mascot-nod');
   }
 
+  /**
+   * @param {string} message
+   */
   _celebrateMascot(message) {
     if (this.mascotWrap) {
       this.mascotWrap.classList.remove('mascot-celebrate');
@@ -824,6 +868,10 @@ export class HotTubGame {
     this._showMascotMessage(message, 2300);
   }
 
+  /**
+   * @param {string} text
+   * @param {number} [durationMs=2200]
+   */
   _showMascotMessage(text, durationMs = 2200) {
     if (!this.mascotSpeech) return;
     if (this.mascotHideTimeout) {
@@ -832,7 +880,9 @@ export class HotTubGame {
     this.mascotSpeech.textContent = text;
     this.mascotSpeech.classList.add('is-visible');
     this.mascotHideTimeout = setTimeout(() => {
-      this.mascotSpeech.classList.remove('is-visible');
+      if (this.mascotSpeech) {
+        this.mascotSpeech.classList.remove('is-visible');
+      }
     }, durationMs);
   }
 
@@ -845,6 +895,9 @@ export class HotTubGame {
     };
   }
 
+  /**
+   * @param {string} str
+   */
   _escapeHtml(str) {
     return String(str)
       .replace(/&/g, '&amp;')

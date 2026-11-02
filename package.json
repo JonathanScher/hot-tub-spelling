@@ -1,0 +1,29 @@
+{
+  "name": "adventurous-lavoisier",
+  "version": "1.0.0",
+  "description": "A calm, storybook-styled French & English vocabulary and spelling web game built for children on **Smartphones** and **Amazon Fire Tablets (Silk Browser)**, powered by a **Leitner Box Spaced Repetition System (SRS)** and an offline-first **Firebase (Cloud Firestore + Google Authentication)** cloud sync backend.",
+  "main": "index.js",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "verify": "tsc --noEmit && vitest run"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JonathanScher/hot-tub-spelling.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/JonathanScher/hot-tub-spelling/issues"
+  },
+  "homepage": "https://github.com/JonathanScher/hot-tub-spelling#readme",
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "fast-check": "^4.10.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}

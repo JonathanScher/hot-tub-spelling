@@ -22,11 +22,17 @@ const PENTATONIC_SCALE = [
 
 class SoundSynthesizer {
   constructor() {
+    /** @type {AudioContext | null} */
     this.ctx = null;
+    /** @type {GainNode | null} */
     this.masterGain = null;
+    /** @type {AudioBuffer | null} */
     this.noiseBuffer = null;
     this.unlocked = false;
-    this.muted = localStorage.getItem(SFX_MUTE_STORAGE_KEY) === 'true';
+    this.muted =
+      typeof localStorage !== 'undefined' && localStorage !== null
+        ? localStorage.getItem(SFX_MUTE_STORAGE_KEY) === 'true'
+        : false;
   }
 
   /**
@@ -35,7 +41,8 @@ class SoundSynthesizer {
    */
   async unlockAudio() {
     try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const win = /** @type {Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }} */ (window);
+      const AudioCtx = win.AudioContext || win.webkitAudioContext;
       if (!AudioCtx) return false;
 
       if (!this.ctx) {
@@ -68,7 +75,8 @@ class SoundSynthesizer {
   _ensureReady() {
     if (this.muted) return false;
     if (!this.ctx) {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const win = /** @type {Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }} */ (window);
+      const AudioCtx = win.AudioContext || win.webkitAudioContext;
       if (!AudioCtx) return false;
       this.ctx = new AudioCtx();
       this.masterGain = this.ctx.createGain();
@@ -100,9 +108,14 @@ class SoundSynthesizer {
     return buffer;
   }
 
+  /**
+   * @param {boolean} isMuted
+   */
   setMuted(isMuted) {
     this.muted = Boolean(isMuted);
-    localStorage.setItem(SFX_MUTE_STORAGE_KEY, String(this.muted));
+    if (typeof localStorage !== 'undefined' && localStorage !== null) {
+      localStorage.setItem(SFX_MUTE_STORAGE_KEY, String(this.muted));
+    }
     if (this.masterGain && this.ctx) {
       this.masterGain.gain.setTargetAtTime(this.muted ? 0 : 0.75, this.ctx.currentTime, 0.02);
     }

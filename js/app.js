@@ -39,7 +39,7 @@ function initApp() {
   const btnGoogleSignin = document.getElementById('btn-google-signin');
   const authErrorMsg = document.getElementById('auth-error-msg');
   const welcomeUserPill = document.getElementById('welcome-user-pill');
-  const welcomeUserAvatar = document.getElementById('welcome-user-avatar');
+  const welcomeUserAvatar = /** @type {HTMLImageElement | null} */ (document.getElementById('welcome-user-avatar'));
   const welcomeUserLabel = document.getElementById('welcome-user-label');
   const btnWelcomeSignout = document.getElementById('btn-welcome-signout');
 
@@ -61,7 +61,7 @@ function initApp() {
   const mathGateModal = document.getElementById('math-gate-modal');
   const formMathGate = document.getElementById('form-math-gate');
   const mathQuestionLabel = document.getElementById('math-question-label');
-  const inputMathAnswer = document.getElementById('input-math-answer');
+  const inputMathAnswer = /** @type {HTMLInputElement | null} */ (document.getElementById('input-math-answer'));
   const mathGateError = document.getElementById('math-gate-error');
   const btnCancelMath = document.getElementById('btn-cancel-math');
 
@@ -70,19 +70,19 @@ function initApp() {
   const parentSyncBadge = document.getElementById('parent-sync-badge');
 
   const parentAuthSignedIn = document.getElementById('parent-auth-signed-in');
-  const parentAuthAvatar = document.getElementById('parent-auth-avatar');
+  const parentAuthAvatar = /** @type {HTMLImageElement | null} */ (document.getElementById('parent-auth-avatar'));
   const parentAuthName = document.getElementById('parent-auth-name');
   const parentAuthEmail = document.getElementById('parent-auth-email');
-  const btnSyncNow = document.getElementById('btn-sync-now');
+  const btnSyncNow = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-sync-now'));
   const btnParentSignout = document.getElementById('btn-parent-signout');
   const parentAuthSignedOut = document.getElementById('parent-auth-signed-out');
   const btnParentSignin = document.getElementById('btn-parent-signin');
   const allowedEmailsChips = document.getElementById('allowed-emails-chips');
 
-  const inputWeekLabel = document.getElementById('input-week-label');
-  const inputWeeklyWords = document.getElementById('input-weekly-words');
+  const inputWeekLabel = /** @type {HTMLInputElement | null} */ (document.getElementById('input-week-label'));
+  const inputWeeklyWords = /** @type {HTMLTextAreaElement | null} */ (document.getElementById('input-weekly-words'));
   const weeklyWordCount = document.getElementById('weekly-word-count');
-  const btnAddWeekly = document.getElementById('btn-add-weekly');
+  const btnAddWeekly = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-add-weekly'));
 
   const statTotalWords = document.getElementById('stat-total-words');
   const statDueWords = document.getElementById('stat-due-words');
