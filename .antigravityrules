@@ -1,0 +1,7 @@
+# Executable Specification Guardrails
+
+1. **Immutable Specs:** All files inside `/specs/**/*.spec.ts` are the immutable source of truth for game mechanics. 
+2. **Forbidden Modifications:** You are STRICTLY FORBIDDEN from editing, weakening, skipping (`.skip`), or deleting existing assertions in `/specs` to make a failing test pass.
+3. **Regression Protocol:** When `vitest` fails after you modify `/src`, the bug is in `/src`. You must revert or fix your implementation code until existing specs pass.
+4. **Rule Change Protocol:** If a user prompt explicitly asks to change an existing game mechanic that contradicts a current spec, you must stop, cite the specific failing spec file and line number, and ask for explicit permission before updating that spec.
+5. **Definition of Done:** No task is complete until `npx tsc --noEmit && npx vitest run` exits with code 0. Every new feature must include a corresponding `GIVEN/WHEN/THEN` behavioral spec and, if it introduces new state variables, an updated `fast-check` invariant check.
