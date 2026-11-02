@@ -1,8 +1,22 @@
 # Cozy Tub Spelling 🫧
 
-A calm, storybook-styled English vocabulary and spelling web game built for children on **Smartphones** and **Amazon Fire Tablets (Silk Browser)**, powered by a **Leitner Box Spaced Repetition System (SRS)** and an offline-first **Google Sheets** cloud sync backend.
+A calm, storybook-styled English vocabulary and spelling web game built for children on **Smartphones** and **Amazon Fire Tablets (Silk Browser)**, powered by a **Leitner Box Spaced Repetition System (SRS)**, **Google Sign-In family access control**, and an offline-first **Google Sheets** cloud sync backend.
 
 Works straight out of the box on **GitHub Pages** (100% static HTML5, CSS3, and modular ES6 JavaScript—no build step required), complete with 8 starter English words pre-loaded for immediate play.
+
+---
+
+## Google Login & Family Allowlist (`js/auth.js`)
+
+Access to the game and Parent Mode is gated on the Welcome screen via **Google Identity Services**:
+- **OAuth 2.0 Web Client ID:** `184637909898-fn9mmeq70sbdfn78u5890hbd3df2nksp.apps.googleusercontent.com`
+- **Authorized Family Accounts:**
+  - `scher.jonathan@gmail.com`
+  - `williams.evamary@gmail.com`
+  - `jonathan.scher.office@gmail.com`
+  *(Additional allowed Google emails can also be added from the **Parent Dashboard**.)*
+- **Persistent Device Session:** Once an authorized family account signs in on a phone or Amazon Fire Tablet, the session is remembered in `localStorage` (including for offline play) until explicitly signed out.
+- **Google Cloud Console Reminder:** In [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials), ensure your OAuth 2.0 Client ID's **Authorized JavaScript origins** includes your GitHub Pages origin (e.g., `https://<your-username>.github.io`) and any local testing origin (e.g., `http://localhost:8000` or `http://127.0.0.1:5500`).
 
 ---
 
@@ -29,7 +43,7 @@ Connect your game to a private Google Spreadsheet so weekly word lists and SRS p
 4. Click **Deploy**, authorize script permissions when prompted, and copy the resulting **Web app URL** (`https://script.google.com/macros/s/.../exec`).
 
 ### Step 4: Link to the Game (& Auto-Configure Fire Tablet)
-1. Open the game on your phone or computer and **hold the discreet lock icon** 🔒 in the top-right corner for **2 seconds** (or tap it once and solve the quick Parent Math Check).
+1. Open the game on your phone or computer, sign in with your authorized Google account, and **hold the discreet lock icon** 🔒 in the top-right corner for **2 seconds** (or tap it once and solve the quick Parent Math Check).
 2. Paste your **Web app URL** into **1. Google Sheets Cloud Sync** and tap **Save & Sync**.
 3. Scan the generated **QR Code** or open the `?syncUrl=...` **One-Tap Setup Link** once on your child's Amazon Fire Tablet—the tablet will automatically save the sync URL and pull your word list!
 

@@ -16,6 +16,7 @@ import {
   normalizeWord
 } from './srs.js';
 import { syncManager, generateQrCodeSvg } from './sync.js';
+import { authManager } from './auth.js';
 import { HotTubGame } from './game.js';
 
 const LOCK_HOLD_DURATION_MS = 2000;
@@ -32,6 +33,24 @@ function initApp() {
   const startSyncNote = document.getElementById('start-sync-note');
   const btnPlay = document.getElementById('btn-play');
   const btnPlayText = document.getElementById('btn-play-text');
+
+  // Google Auth DOM References
+  const authGateBox = document.getElementById('auth-gate-box');
+  const googleSigninBtn = document.getElementById('google-signin-btn');
+  const authErrorMsg = document.getElementById('auth-error-msg');
+  const authUserPill = document.getElementById('auth-user-pill');
+  const authUserAvatar = document.getElementById('auth-user-avatar');
+  const authUserLabel = document.getElementById('auth-user-label');
+  const btnWelcomeSignout = document.getElementById('btn-welcome-signout');
+
+  const parentAuthBadge = document.getElementById('parent-auth-badge');
+  const parentAuthAvatar = document.getElementById('parent-auth-avatar');
+  const parentAuthName = document.getElementById('parent-auth-name');
+  const parentAuthEmail = document.getElementById('parent-auth-email');
+  const btnParentSignout = document.getElementById('btn-parent-signout');
+  const allowedEmailsChips = document.getElementById('allowed-emails-chips');
+  const inputExtraEmail = document.getElementById('input-extra-email');
+  const btnAddExtraEmail = document.getElementById('btn-add-extra-email');
 
   const completeOverlay = document.getElementById('complete-overlay');
   const completeSummaryText = document.getElementById('complete-summary-text');
@@ -112,11 +131,97 @@ function initApp() {
     }
   });
 
+  // 0. Wire Google Login & Family Allowlist Gate
+  function syncAuthUi(session, errorInfo = null) {
+    const isAuthed = Boolean(session && session.email);
+
+    if (authGateBox) authGateBox.hidden = isAuthed;
+    if (btnPlay) btnPlay.hidden = !isAuthed;
+    if (authUserPill) authUserPill.hidden = !isAuthed;
+    if (btnParentLock) btnParentLock.hidden = !isAuthed;
+
+    if (isAuthed) {
+      if (authErrorMsg) {
+        authErrorMsg.hidden = true;
+        authErrorMsg.textContent = '';
+      }
+      if (authUserLabel) {
+        authUserLabel.textContent = `Signed in as ${session.givenName || session.email}`;
+        authUserLabel.title = session.email;
+      }
+      if (authUserAvatar) {
+        if (session.picture) {
+          authUserAvatar.src = session.picture;
+          authUserAvatar.referrerPolicy = 'no-referrer';
+          authUserAvatar.hidden = false;
+        } else {
+          authUserAvatar.hidden = true;
+        }
+      }
+    } else {
+      // Ensure the game is gated by the start overlay whenever signed out
+      game.pause();
+      if (completeOverlay) {
+        completeOverlay.hidden = true;
+        completeOverlay.classList.remove('is-active');
+      }
+      if (parentModal) parentModal.hidden = true;
+      if (mathGateModal) mathGateModal.hidden = true;
+      if (startOverlay) {
+        startOverlay.hidden = false;
+        startOverlay.classList.add('is-active');
+      }
+      authManager.renderButton(googleSigninBtn);
+
+      if (authErrorMsg) {
+        if (errorInfo && errorInfo.message) {
+          authErrorMsg.textContent = errorInfo.message;
+          authErrorMsg.hidden = false;
+        } else {
+          authErrorMsg.hidden = true;
+          authErrorMsg.textContent = '';
+        }
+      }
+    }
+  }
+
+  authManager.onAuthChange((session, errorInfo) => {
+    syncAuthUi(session, errorInfo);
+    if (session && !errorInfo) {
+      showToast(`Welcome, ${session.givenName || session.email}!`);
+      if (syncManager.getSyncUrl() && navigator.onLine !== false) {
+        syncManager.syncNow().then(() => refreshWelcomeMetadata());
+      }
+    }
+  });
+
+  syncAuthUi(authManager.getSession());
+  authManager.initGoogleIdentity(googleSigninBtn);
+
+  if (btnWelcomeSignout) {
+    btnWelcomeSignout.addEventListener('click', () => {
+      if (window.confirm('Sign out of your Google account on this device?')) {
+        authManager.signOut();
+        showToast('Signed out of Google.');
+      }
+    });
+  }
+
+  if (btnParentSignout) {
+    btnParentSignout.addEventListener('click', () => {
+      parentModal.hidden = true;
+      authManager.signOut();
+      showToast('Signed out of Google.');
+    });
+  }
+
   // 1. Check ?syncUrl=... query parameter for one-tap Amazon Fire Tablet configuration
   const autoConfiguredUrl = syncManager.consumeAutoConfigFromUrl();
   if (autoConfiguredUrl) {
     showToast('Cloud Sync URL automatically configured for this device!', 4200);
-    syncManager.syncNow().then(() => refreshWelcomeMetadata());
+    if (authManager.isAuthenticated()) {
+      syncManager.syncNow().then(() => refreshWelcomeMetadata());
+    }
   }
 
   // 2. Wire Sync Status Indicator
@@ -179,6 +284,12 @@ function initApp() {
 
   // 6. Session Start ("Play" & "Play Again" Buttons)
   async function launchNewSession(triggerBtn, labelEl) {
+    if (!authManager.isAuthenticated()) {
+      showToast('Please sign in with an authorized Google account first.');
+      syncAuthUi(null);
+      return;
+    }
+
     if (triggerBtn) triggerBtn.disabled = true;
     const prevText = labelEl ? labelEl.textContent : '';
     if (labelEl) labelEl.textContent = 'Warming tub...';
@@ -291,6 +402,7 @@ function initApp() {
 
   btnParentLock.addEventListener('pointerdown', (ev) => {
     ev.preventDefault();
+    if (!authManager.isAuthenticated()) return;
     holdTriggered = false;
     holdStartTs = performance.now();
     btnParentLock.classList.add('is-holding');
@@ -314,6 +426,7 @@ function initApp() {
   btnParentLock.addEventListener('contextmenu', (e) => e.preventDefault());
 
   function openMathGate() {
+    if (!authManager.isAuthenticated()) return;
     game.pause();
     const a = 6 + Math.floor(Math.random() * 8);
     const b = 5 + Math.floor(Math.random() * 9);
@@ -347,8 +460,80 @@ function initApp() {
   });
 
   // 10. Parent Dashboard Operations
+  function renderAllowedEmailsList() {
+    if (!allowedEmailsChips) return;
+    allowedEmailsChips.innerHTML = '';
+
+    for (const email of authManager.getDefaultAllowedEmails()) {
+      const chip = document.createElement('span');
+      chip.className = 'allowed-email-chip is-default';
+      chip.textContent = `🔒 ${email}`;
+      allowedEmailsChips.appendChild(chip);
+    }
+
+    for (const email of authManager.getExtraAllowedEmails()) {
+      const chip = document.createElement('span');
+      chip.className = 'allowed-email-chip';
+      const textSpan = document.createElement('span');
+      textSpan.textContent = email;
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'chip-remove-btn';
+      removeBtn.textContent = '✕';
+      removeBtn.title = `Remove ${email}`;
+      removeBtn.addEventListener('click', () => {
+        authManager.removeExtraAllowedEmail(email);
+        renderAllowedEmailsList();
+        showToast(`Removed ${email} from extra allowed accounts.`);
+      });
+      chip.appendChild(textSpan);
+      chip.appendChild(removeBtn);
+      allowedEmailsChips.appendChild(chip);
+    }
+  }
+
+  if (btnAddExtraEmail && inputExtraEmail) {
+    btnAddExtraEmail.addEventListener('click', () => {
+      const res = authManager.addExtraAllowedEmail(inputExtraEmail.value);
+      if (!res.ok) {
+        showToast(res.error);
+        inputExtraEmail.focus();
+        return;
+      }
+      inputExtraEmail.value = '';
+      renderAllowedEmailsList();
+      showToast(
+        res.alreadyAllowed
+          ? `${res.email} is already authorized.`
+          : `Added ${res.email} to authorized accounts on this device!`
+      );
+    });
+  }
+
   function openParentDashboard() {
+    if (!authManager.isAuthenticated()) return;
     game.pause();
+
+    const session = authManager.getSession();
+    if (session) {
+      if (parentAuthName) parentAuthName.textContent = session.name || session.givenName || 'Family Member';
+      if (parentAuthEmail) parentAuthEmail.textContent = session.email;
+      if (parentAuthBadge) {
+        parentAuthBadge.textContent = 'Google Verified';
+        parentAuthBadge.classList.add('is-connected');
+      }
+      if (parentAuthAvatar) {
+        if (session.picture) {
+          parentAuthAvatar.src = session.picture;
+          parentAuthAvatar.referrerPolicy = 'no-referrer';
+          parentAuthAvatar.hidden = false;
+        } else {
+          parentAuthAvatar.hidden = true;
+        }
+      }
+    }
+    renderAllowedEmailsList();
+
     const currentUrl = syncManager.getSyncUrl();
     inputSyncUrl.value = currentUrl;
     inputWeekLabel.value = suggestNextWeekLabel();

@@ -9,6 +9,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='28' fill='%23DCEFF9' stroke='%239B84BE' stroke-width='4'/%3E%3Cpath d='M18 22 A16 16 0 0 1 42 18' fill='none' stroke='%23FFFDF8' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E" />
   <title>Cozy Tub Spelling — Relaxing Vocabulary &amp; SRS Game</title>
   <link rel="stylesheet" href="styles.css" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
   <!-- Procedural Hand-Drawn SVG Filters (feTurbulence + feDisplacementMap) -->
@@ -208,10 +209,26 @@
           Listen to each English word and pop the floating lowercase bubbles in order!
         </p>
 
-        <button type="button" id="btn-play" class="big-play-btn">
+        <!-- Google Login Gate (Shown when not signed in on this device) -->
+        <div id="auth-gate-box" class="auth-gate-box">
+          <p class="auth-gate-prompt">Sign in with your family Google account to unlock the game:</p>
+          <div id="google-signin-btn" class="google-signin-btn-wrap"></div>
+          <p id="auth-error-msg" class="auth-error-msg" hidden></p>
+        </div>
+
+        <button type="button" id="btn-play" class="big-play-btn" hidden>
           <span class="play-btn-bubble" aria-hidden="true">▶</span>
           <span id="btn-play-text">Play</span>
         </button>
+
+        <!-- Signed-in Family Member Badge -->
+        <div id="auth-user-pill" class="auth-user-pill" hidden>
+          <img id="auth-user-avatar" class="auth-user-avatar" alt="" hidden />
+          <span id="auth-user-label" class="auth-user-label"></span>
+          <button type="button" id="btn-welcome-signout" class="auth-signout-link" title="Sign out of Google">
+            Sign out
+          </button>
+        </div>
 
         <p id="start-sync-note" class="welcome-sync-note">8 starter words ready • Offline friendly</p>
       </div>
@@ -268,7 +285,7 @@
       </div>
     </div>
 
-    <!-- Parent Dashboard Modal (Google Sheets Sync, Tablet QR/Link, Weekly Editor, SRS Table) -->
+    <!-- Parent Dashboard Modal (Google Auth, Google Sheets Sync, Tablet QR/Link, Weekly Editor, SRS Table) -->
     <div id="parent-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="parent-modal-title" hidden>
       <div class="parent-dashboard">
         <div class="parent-header">
@@ -280,6 +297,38 @@
         </div>
 
         <div class="parent-body">
+          <!-- Section 0: Family Google Account & Access Control -->
+          <section class="parent-card">
+            <div class="card-title-row">
+              <h3>Family Google Login &amp; Access</h3>
+              <span id="parent-auth-badge" class="status-badge is-connected">Signed In</span>
+            </div>
+            <div class="parent-auth-row">
+              <div class="parent-auth-info">
+                <img id="parent-auth-avatar" class="auth-user-avatar" alt="" hidden />
+                <div>
+                  <strong id="parent-auth-name">Family Member</strong>
+                  <div id="parent-auth-email" class="parent-help-text" style="margin: 0;"></div>
+                </div>
+              </div>
+              <button type="button" id="btn-parent-signout" class="secondary-pastel-btn">Sign Out</button>
+            </div>
+            <div class="allowed-emails-box">
+              <span class="allowed-emails-label">Authorized Family Accounts:</span>
+              <div id="allowed-emails-chips" class="allowed-emails-chips"></div>
+              <div class="sync-input-row" style="margin-top: 8px;">
+                <input
+                  type="email"
+                  id="input-extra-email"
+                  class="pastel-input"
+                  placeholder="Add another allowed Google email..."
+                  autocomplete="off"
+                />
+                <button type="button" id="btn-add-extra-email" class="secondary-pastel-btn">Add Email</button>
+              </div>
+            </div>
+          </section>
+
           <!-- Section 1: Google Sheets Backend & Fire Tablet Setup Link/QR -->
           <section class="parent-card">
             <div class="card-title-row">
