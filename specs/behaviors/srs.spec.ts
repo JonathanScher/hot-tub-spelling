@@ -5,6 +5,8 @@ import {
   getLocalISODate,
   addDaysISO,
   getDefaultStarterWords,
+  getDefaultAudioUrl,
+  DEFAULT_WORD_AUDIO_MAP,
   normalizeWord,
   normalizeWordRecord,
   loadWords,
@@ -404,6 +406,68 @@ describe('SRS & Vocabulary Store Mechanics (js/srs.js)', () => {
       // THEN both outputs are identical and contain the exact same elements
       expect(out1).toEqual(out2);
       expect([...out1].sort()).toEqual(input);
+    });
+  });
+
+  describe('Default Curriculum Audio Mapping & Offline Fallback', () => {
+    const expected16 = [
+      'sans', 'suivre', 'savoir', 'sauter', 'semaine',
+      'serpent', 'sortir', 'soleil', 'souvent',
+      'câlin', 'singe', 'enfin', 'quinze', 'prince', 'loin', 'printemps'
+    ];
+
+    it('maps every default Week 7 and Week 8 word to its bundled audio asset', () => {
+      for (const word of expected16) {
+        const audioUrl = getDefaultAudioUrl(word);
+        expect(audioUrl).toBe(`assets/audio/words/${word}.mp3`);
+      }
+      // Non-default word returns empty string
+      expect(getDefaultAudioUrl('ordinateur')).toBe('');
+      expect(getDefaultAudioUrl('')).toBe('');
+    });
+
+    it('populates custom_audio_url in getDefaultStarterWords()', () => {
+      const starters = getDefaultStarterWords('2026-11-01');
+      expect(starters).toHaveLength(16);
+      for (const rec of starters) {
+        expect(rec.custom_audio_url).toBe(`assets/audio/words/${rec.word}.mp3`);
+      }
+    });
+
+    it('attaches default audio when loading legacy stored records that had empty custom_audio_url', () => {
+      const storage = createIsolatedStorage();
+      const legacyRaw = [
+        { word: 'sans', custom_audio_url: '' },
+        { word: 'câlin', custom_audio_url: '' },
+        { word: 'bonjour', custom_audio_url: '' }
+      ];
+      storage.setItem('hottub_srs_words_v2', JSON.stringify(legacyRaw));
+
+      const loaded = loadWords(storage, '2026-11-01', 'daughter');
+      const sans = loaded.find((w) => w.word === 'sans');
+      const calin = loaded.find((w) => w.word === 'câlin');
+      const bonjour = loaded.find((w) => w.word === 'bonjour');
+
+      expect(sans?.custom_audio_url).toBe('assets/audio/words/sans.mp3');
+      expect(calin?.custom_audio_url).toBe('assets/audio/words/câlin.mp3');
+      expect(bonjour?.custom_audio_url).toBe(''); // Non-starter word stays empty
+    });
+
+    it('attaches default audio in mergeWordsFromCloud when remote records have empty custom_audio_url', () => {
+      const storage = createIsolatedStorage();
+      const remoteRows = [
+        { word: 'soleil', box: 2, custom_audio_url: '' },
+        { word: 'singe', box: 3, custom_audio_url: 'https://example.com/custom.mp3' }
+      ];
+
+      const merged = mergeWordsFromCloud(remoteRows, new Set(), 'Week 8', storage, '2026-11-01', 'daughter');
+      const soleil = merged.find((w) => w.word === 'soleil');
+      const singe = merged.find((w) => w.word === 'singe');
+
+      // soleil was missing custom_audio_url in Firestore, so it gets the bundled sound
+      expect(soleil?.custom_audio_url).toBe('assets/audio/words/soleil.mp3');
+      // singe had an explicit custom url, so it is preserved
+      expect(singe?.custom_audio_url).toBe('https://example.com/custom.mp3');
     });
   });
 });

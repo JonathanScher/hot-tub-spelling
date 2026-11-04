@@ -71,7 +71,7 @@ This audit catalogs the complete runtime state tree, maps all side-effect and br
 
 ### 1.4 Auxiliary Module & UI Controller State
 - **UI Controller ([`js/app.js`](file:///c:/Users/scher/Documents/antigravity/adventurous-lavoisier/js/app.js)):** `toastTimer`, `holdStartTs`, `holdRaf`, `holdTriggered`, `expectedMathSum` (parent lock math challenge `a + b` where $a \in [6, 13]$, $b \in [5, 13]$).
-- **Audio Synthesizer ([`js/audio.js`](file:///c:/Users/scher/Documents/antigravity/adventurous-lavoisier/js/audio.js)):** `soundEngine.ctx` (`AudioContext`), `masterGain`, `noiseBuffer`, `unlocked`, `muted` (`localStorage['hottub_sfx_muted_v1']`).
+- **Audio Synthesizer ([`js/audio.js`](file:///c:/Users/scher/Documents/antigravity/adventurous-lavoisier/js/audio.js)):** `soundEngine.ctx` (`AudioContext`), `masterGain`, `noiseBuffer`, `unlocked`.
 - **Speech Engine ([`js/speech.js`](file:///c:/Users/scher/Documents/antigravity/adventurous-lavoisier/js/speech.js)):** `mp3Cache` (`Map`), `inflightLookups` (`Map`), `player` (`HTMLAudioElement`), `activeToken` (monotonic counter), `voices` (`Array`), `speakingListeners` (`Set`).
 - **Auth & Sync ([`js/auth.js`](file:///c:/Users/scher/Documents/antigravity/adventurous-lavoisier/js/auth.js), [`js/sync.js`](file:///c:/Users/scher/Documents/antigravity/adventurous-lavoisier/js/sync.js)):** `authManager.session` (`localStorage['hottub_firebase_auth_session_v1']`), extra emails (`localStorage['hottub_extra_allowed_emails_v1']`), `syncManager.syncing`, dirty SRS map (`localStorage['hottub_dirty_srs_queue_v2']`), pending weekly batches (`localStorage['hottub_pending_weekly_batches_v2']`).
 

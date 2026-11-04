@@ -6,8 +6,6 @@
  * - Warm celesta/marimba chime arpeggio (word completion & session celebration)
  */
 
-const SFX_MUTE_STORAGE_KEY = 'hottub_sfx_muted_v1';
-
 // Warm C-major pentatonic frequencies for sequential letter pops
 const PENTATONIC_SCALE = [
   293.66, // D4
@@ -29,10 +27,13 @@ class SoundSynthesizer {
     /** @type {AudioBuffer | null} */
     this.noiseBuffer = null;
     this.unlocked = false;
-    this.muted =
-      typeof localStorage !== 'undefined' && localStorage !== null
-        ? localStorage.getItem(SFX_MUTE_STORAGE_KEY) === 'true'
-        : false;
+
+    // Clear any legacy mute preference so audio always plays
+    if (typeof localStorage !== 'undefined' && localStorage !== null) {
+      try {
+        localStorage.removeItem('hottub_sfx_muted_v1');
+      } catch (_) {}
+    }
   }
 
   /**
@@ -48,7 +49,7 @@ class SoundSynthesizer {
       if (!this.ctx) {
         this.ctx = new AudioCtx();
         this.masterGain = this.ctx.createGain();
-        this.masterGain.gain.value = this.muted ? 0 : 0.75;
+        this.masterGain.gain.value = 0.75;
         this.masterGain.connect(this.ctx.destination);
         this.noiseBuffer = this._createSoftNoiseBuffer();
       }
@@ -73,7 +74,6 @@ class SoundSynthesizer {
   }
 
   _ensureReady() {
-    if (this.muted) return false;
     if (!this.ctx) {
       const win = /** @type {Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }} */ (window);
       const AudioCtx = win.AudioContext || win.webkitAudioContext;
@@ -106,23 +106,6 @@ class SoundSynthesizer {
       data[i] = (b0 + b1 + b2 + white * 0.1848) * 0.18;
     }
     return buffer;
-  }
-
-  /**
-   * @param {boolean} isMuted
-   */
-  setMuted(isMuted) {
-    this.muted = Boolean(isMuted);
-    if (typeof localStorage !== 'undefined' && localStorage !== null) {
-      localStorage.setItem(SFX_MUTE_STORAGE_KEY, String(this.muted));
-    }
-    if (this.masterGain && this.ctx) {
-      this.masterGain.gain.setTargetAtTime(this.muted ? 0 : 0.75, this.ctx.currentTime, 0.02);
-    }
-  }
-
-  isMuted() {
-    return this.muted;
   }
 
   /**

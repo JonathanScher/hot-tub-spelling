@@ -419,6 +419,39 @@ export function addDaysISO(baseIso, daysToAdd, fallbackDate) {
 }
 
 /**
+ * Bundled offline audio files for Week 7 and Week 8 starter curriculum.
+ * @type {Record<string, string>}
+ */
+export const DEFAULT_WORD_AUDIO_MAP = {
+  'sans': 'assets/audio/words/sans.mp3',
+  'suivre': 'assets/audio/words/suivre.mp3',
+  'savoir': 'assets/audio/words/savoir.mp3',
+  'sauter': 'assets/audio/words/sauter.mp3',
+  'semaine': 'assets/audio/words/semaine.mp3',
+  'serpent': 'assets/audio/words/serpent.mp3',
+  'sortir': 'assets/audio/words/sortir.mp3',
+  'soleil': 'assets/audio/words/soleil.mp3',
+  'souvent': 'assets/audio/words/souvent.mp3',
+  'câlin': 'assets/audio/words/câlin.mp3',
+  'singe': 'assets/audio/words/singe.mp3',
+  'enfin': 'assets/audio/words/enfin.mp3',
+  'quinze': 'assets/audio/words/quinze.mp3',
+  'prince': 'assets/audio/words/prince.mp3',
+  'loin': 'assets/audio/words/loin.mp3',
+  'printemps': 'assets/audio/words/printemps.mp3'
+};
+
+/**
+ * Returns the default bundled audio URL for a given word if one exists.
+ * @param {string} word
+ * @returns {string}
+ */
+export function getDefaultAudioUrl(word) {
+  const clean = normalizeWord(word);
+  return DEFAULT_WORD_AUDIO_MAP[clean] || '';
+}
+
+/**
  * Initial starter word list (Week 7 & Week 8) so the game is immediately playable
  * and seeds Cloud Firestore on first connect.
  * @param {string} [todayIso]
@@ -459,7 +492,7 @@ export function getDefaultStarterWords(todayIso) {
       streak: 0,
       total_attempts: 0,
       correct_attempts: 0,
-      custom_audio_url: ''
+      custom_audio_url: getDefaultAudioUrl(word)
     });
   }
   for (const word of week8Words) {
@@ -472,7 +505,7 @@ export function getDefaultStarterWords(todayIso) {
       streak: 0,
       total_attempts: 0,
       correct_attempts: 0,
-      custom_audio_url: ''
+      custom_audio_url: getDefaultAudioUrl(word)
     });
   }
 
@@ -578,6 +611,10 @@ export function loadWords(customStorage, todayIso, profileId) {
           const rec = normalizeWordRecord(item, 'Week 8', today);
           if (rec.word && !seen.has(rec.word)) {
             seen.add(rec.word);
+            if (!rec.custom_audio_url) {
+              const def = getDefaultAudioUrl(rec.word);
+              if (def) rec.custom_audio_url = def;
+            }
             cleaned.push(rec);
           }
         }
@@ -820,6 +857,10 @@ export function mergeWordsFromCloud(
   for (const row of remoteRows) {
     const remoteRec = normalizeWordRecord(row, 'Week 8', todayIso);
     if (!remoteRec.word) continue;
+    if (!remoteRec.custom_audio_url) {
+      const def = getDefaultAudioUrl(remoteRec.word);
+      if (def) remoteRec.custom_audio_url = def;
+    }
 
     const m = /^week\s*(\d+)$/i.exec(String(remoteRec.week_label).trim());
     if (m) {

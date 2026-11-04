@@ -26,7 +26,8 @@ import {
   loadWords,
   getCurrentWeekLabel,
   normalizeWord,
-  getActiveProfileId
+  getActiveProfileId,
+  getDefaultAudioUrl
 } from './srs.js';
 
 const DIRTY_WORDS_STORAGE_KEY = 'hottub_dirty_srs_queue_v2';
@@ -285,12 +286,22 @@ class CloudSyncManager {
         }
 
         const remoteWords = [];
+        const missingAudioWords = [];
         wordsSnap.forEach((docSnap) => {
           const d = docSnap.data();
           if (d && d.word) {
             remoteWords.push(d);
+            const defAudio = getDefaultAudioUrl(d.word);
+            if (defAudio && (!d.custom_audio_url || !String(d.custom_audio_url).trim())) {
+              missingAudioWords.push({ word: d.word, custom_audio_url: defAudio });
+            }
           }
         });
+
+        // If remote Firestore docs for default words are missing audio, backfill them non-blockingly
+        if (missingAudioWords.length > 0) {
+          this._backfillMissingDefaultAudio(missingAudioWords).catch(() => {});
+        }
 
         // If Firestore is brand new and empty, seed it with our local starter words (Week 7 & Week 8)!
         if (remoteWords.length === 0) {
@@ -349,7 +360,7 @@ class CloudSyncManager {
         streak: w.streak || 0,
         total_attempts: w.total_attempts || 0,
         correct_attempts: w.correct_attempts || 0,
-        custom_audio_url: w.custom_audio_url || '',
+        custom_audio_url: w.custom_audio_url || getDefaultAudioUrl(cleanWord) || '',
         updated_at: nowIso
       });
     }
@@ -366,6 +377,27 @@ class CloudSyncManager {
     );
 
     await batch.commit();
+  }
+
+  /**
+   * Backfills default bundled audio URLs to existing remote Firestore documents
+   * that currently have empty custom_audio_url. Preserves all SRS and attempt metrics.
+   * @param {Array<{word: string, custom_audio_url: string}>} wordsList
+   */
+  async _backfillMissingDefaultAudio(wordsList) {
+    if (!auth.currentUser || !Array.isArray(wordsList) || wordsList.length === 0) return;
+    try {
+      const batch = writeBatch(db);
+      for (const item of wordsList) {
+        const cleanWord = normalizeWord(item.word);
+        if (!cleanWord) continue;
+        const wordRef = doc(db, WORDS_COLLECTION, toWordDocId(cleanWord));
+        batch.set(wordRef, { custom_audio_url: item.custom_audio_url }, { merge: true });
+      }
+      await batch.commit();
+    } catch {
+      // Background non-critical update; retry next sync if offline or interrupted
+    }
   }
 
   /**

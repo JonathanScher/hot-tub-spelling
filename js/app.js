@@ -82,9 +82,6 @@ function initApp() {
 
   const btnListen = document.getElementById('btn-listen');
   const btnHint = document.getElementById('btn-hint');
-  const btnSfxToggle = document.getElementById('btn-sfx-toggle');
-  const iconSfxOn = document.getElementById('icon-sfx-on');
-  const iconSfxOff = document.getElementById('icon-sfx-off');
   const syncStatusDot = document.getElementById('sync-status-dot');
 
   const btnParentLock = document.getElementById('btn-parent-lock');
@@ -303,23 +300,7 @@ function initApp() {
     }
   });
 
-  // 4. Sound Effects Mute Toggle
-  function syncSfxIcons() {
-    const muted = soundEngine.isMuted();
-    if (iconSfxOn) iconSfxOn.hidden = muted;
-    if (iconSfxOff) iconSfxOff.hidden = !muted;
-  }
-  syncSfxIcons();
-
-  btnSfxToggle.addEventListener('click', () => {
-    soundEngine.setMuted(!soundEngine.isMuted());
-    syncSfxIcons();
-    if (!soundEngine.isMuted()) {
-      soundEngine.unlockAudio().then(() => soundEngine.playUiTap());
-    }
-  });
-
-  // 5. Refresh Welcome Screen Metadata & Learner Profiles
+  // 4. Refresh Welcome Screen Metadata & Learner Profiles
   function refreshProfileUI() {
     const activeId = getActiveProfileId();
     const profiles = getProfiles();

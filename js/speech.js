@@ -3,7 +3,7 @@
  * Configured for Canadian French (fr-CA) with fallback to global French voices.
  *
  * Cascade Order:
- *  1. Tier 1 (Custom Audio URL): Plays optional custom_audio_url / audio_url from Firebase Cloud Firestore.
+ *  1. Tier 1 (Custom Audio URL): Plays local bundled human MP3 audio or custom audio URL from Firebase.
  *  2. Tier 2 (Dictionary API Human Audio): Fetches https://api.dictionaryapi.dev/api/v2/entries/en/<word>,
  *     extracts valid .mp3 phonetic audio URL (if learning English words with French accents),
  *     caches in memory, and plays via HTML5 <audio>.
@@ -11,6 +11,8 @@
  *     prioritizing Canadian French voices (lang = 'fr-CA', rate = 0.85) such as
  *     Microsoft Caroline/Claude/Nathalie or Google French.
  */
+
+import { getDefaultAudioUrl } from './srs.js';
 
 // Minimal valid 44-byte 1-sample silent PCM WAV for gesture-unlocking HTML5 <audio> on Silk/Safari
 const SILENT_WAV_DATA_URI =
@@ -111,7 +113,9 @@ class SpeechCascadeEngine {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
 
     for (const item of wordList) {
-      const custom = (item && (item.custom_audio_url || item.audio_url) || '').trim();
+      const custom =
+        (item && (item.custom_audio_url || item.audio_url) || '').trim() ||
+        getDefaultAudioUrl(item && item.word ? item.word : '');
       if (custom) continue;
       const clean = this._cleanWord(item && item.word ? item.word : '');
       if (clean && !this.mp3Cache.has(clean)) {
@@ -141,8 +145,10 @@ class SpeechCascadeEngine {
     this._notifySpeaking(true);
 
     try {
-      // TIER 1: Optional Custom Audio URL from Firebase Cloud Firestore
-      const customUrl = String(record.custom_audio_url || record.audio_url || '').trim();
+      // TIER 1: Custom Audio URL from Firebase Cloud Firestore or local bundled word sound
+      const customUrl =
+        String(record.custom_audio_url || record.audio_url || '').trim() ||
+        getDefaultAudioUrl(cleanWord);
       if (customUrl) {
         const tier1Ok = await this._playHtml5Audio(this._normalizeUrl(customUrl), token, 4500);
         if (token !== this.activeToken) return { played: false, tier: 0 };
@@ -388,10 +394,16 @@ class SpeechCascadeEngine {
   }
 
   _normalizeUrl(url) {
-    if (url.startsWith('//')) {
-      return `https:${url}`;
+    if (!url) return '';
+    let target = url;
+    if (target.startsWith('//')) {
+      target = `https:${target}`;
     }
-    return url;
+    try {
+      return encodeURI(decodeURI(target));
+    } catch {
+      return target;
+    }
   }
 
   _cleanWord(raw) {
