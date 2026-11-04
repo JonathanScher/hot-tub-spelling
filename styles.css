@@ -1549,14 +1549,6 @@ body {
   font-weight: 700;
 }
 
-.chip-stage-badge {
-  font-size: 0.8rem;
-  font-weight: 600;
-  opacity: 0.92;
-  background: rgba(255, 255, 255, 0.7);
-  padding: 2px 7px;
-  border-radius: 999px;
-}
 
 @media (max-height: 600px) {
   .celebration-card {
@@ -1964,35 +1956,27 @@ body {
   text-transform: none !important;
 }
 
-.box-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 10px 3px 4px;
-  border-radius: 999px;
-  font-weight: 700;
-  font-size: 0.8rem;
-  background: var(--cream-paper);
+.th-stage,
+.td-stage {
+  text-align: center;
+  width: 80px;
 }
 
 .pill-stage-img {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   object-fit: cover;
-  border: 1px solid rgba(140, 88, 58, 0.2);
+  border: 1.5px solid rgba(140, 88, 58, 0.25);
   background: #fff;
-  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: middle;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: transform 0.15s ease;
 }
 
-.pill-stage-name {
-  font-weight: 700;
-}
-
-.pill-stars {
-  font-size: 0.74rem;
-  letter-spacing: -0.5px;
-  opacity: 0.85;
+.pill-stage-img:hover {
+  transform: scale(1.15);
 }
 
 /* Garden Growth Stages Legend */
@@ -2063,11 +2047,6 @@ body {
   user-select: none;
 }
 
-.box-pill.box-1 { background: #FDEAE6; color: #8C3F34; }
-.box-pill.box-2 { background: #FDF2D4; color: #785A18; }
-.box-pill.box-3 { background: #E4F2FA; color: #2B5B78; }
-.box-pill.box-4 { background: #EAE2F7; color: #4F3A73; }
-.box-pill.box-5 { background: #DFF2E3; color: #285C35; }
 
 .due-tag {
   color: #276482;

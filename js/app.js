@@ -593,10 +593,10 @@ function initApp() {
         const stage = getGardenStage(boxNum);
         const chip = document.createElement('span');
         chip.className = `word-chip${item.masteredFirstTry ? '' : ' practiced'}`;
+        chip.title = `Stage ${stage.level}: ${stage.name}`;
         chip.innerHTML = `
           <img src="${stage.icon}" class="chip-stage-img" alt="${stage.name}" />
           <span class="chip-word">${escapeHtml(item.word)}</span>
-          <span class="chip-stage-badge">${stage.emoji} ${stage.name} (Lvl ${boxNum})</span>
         `;
         completeWordChips.appendChild(chip);
       }
@@ -865,17 +865,17 @@ function initApp() {
         : escapeHtml(w.next_review);
 
       const stage = getGardenStage(w.box);
-      const stars = '★'.repeat(w.box) + '☆'.repeat(Math.max(0, 5 - w.box));
 
       tr.innerHTML = `
         <td class="td-word">${escapeHtml(w.word)}</td>
         <td>${escapeHtml(w.week_label)}</td>
-        <td>
-          <span class="box-pill box-${w.box}" title="Stage ${stage.level}: ${stage.name} (${stage.intervalLabel})">
-            <img src="${stage.icon}" class="pill-stage-img" alt="${stage.name}" />
-            <span class="pill-stage-name">${stage.name}</span>
-            <span class="pill-stars">${stars}</span>
-          </span>
+        <td class="td-stage">
+          <img
+            src="${stage.icon}"
+            class="pill-stage-img"
+            alt="${stage.name}"
+            title="Stage ${stage.level}: ${stage.name} (${stage.intervalLabel})"
+          />
         </td>
         <td>${escapeHtml(accuracyText)}</td>
         <td>${reviewDisplay}</td>
