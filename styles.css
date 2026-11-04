@@ -1558,6 +1558,49 @@ body {
   border-radius: 999px;
 }
 
+@media (max-height: 600px) {
+  .celebration-card {
+    padding: 14px 18px 16px;
+    max-height: calc(100vh - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+
+  .celebration-card .welcome-mascot-badge {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 4px;
+  }
+
+  .celebration-card .storybook-kicker {
+    font-size: 0.74rem;
+    padding: 2px 10px;
+    margin-bottom: 2px;
+  }
+
+  .celebration-card .welcome-title {
+    font-size: 1.35rem;
+    margin: 2px 0 4px;
+  }
+
+  .celebration-card .welcome-subtitle {
+    font-size: 0.86rem;
+    margin-bottom: 8px;
+    line-height: 1.25;
+  }
+
+  .celebration-card .complete-word-chips {
+    max-height: 120px;
+    margin-bottom: 10px;
+    padding: 6px 4px;
+  }
+
+  .celebration-card .big-play-btn {
+    padding: 10px 24px;
+    font-size: 1.15rem;
+    min-width: 170px;
+  }
+}
+
 /* ==========================================================================
    Parent Math Gate & Full Parent Dashboard Modal
    ========================================================================== */
