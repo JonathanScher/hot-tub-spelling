@@ -305,7 +305,8 @@ export function chooseNextBubbleCharOnState(state) {
   const distractors = getPlausibleDistractors(
     requiredChar,
     state.currentWordObj ? state.currentWordObj.word : '',
-    state.allVocabWords
+    state.allVocabWords,
+    state.currentIndex
   );
   if (distractors.length > 0) {
     return distractors[Math.floor(state.prng() * distractors.length)];

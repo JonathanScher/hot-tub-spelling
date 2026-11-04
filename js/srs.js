@@ -358,31 +358,31 @@ const ACCENT_FAMILIES = {
 /** @type {Record<string, string[]>} */
 const PLAUSIBLE_LETTER_NEIGHBORS = {
   a: ['e', 'o', 'u', 'c', 'd'],
-  b: ['d', 'p', 'h', 'k', 'g'],
-  c: ['o', 'e', 'a', 's', 'k'],
-  d: ['b', 'p', 'q', 't', 'g'],
-  e: ['a', 'c', 'o', 'i', 's'],
-  f: ['t', 'l', 'v', 'r', 'p'],
-  g: ['q', 'p', 'y', 'j', 'd'],
+  b: ['d', 'p', 'q', 'g', 't', 'h'],
+  c: ['s', 'k', 'q', 'g', 'o', 'e'],
+  d: ['t', 'b', 'p', 'q', 'g'],
+  e: ['a', 'o', 'i', 'u', 's'],
+  f: ['v', 'p', 't', 'l', 'r'],
+  g: ['c', 'j', 'k', 'q', 'd', 'p'],
   h: ['n', 'b', 'k', 'm', 'r'],
-  i: ['l', 'j', 'e', 'y', 't'],
-  j: ['i', 'g', 'y', 'l', 'p'],
-  k: ['h', 'c', 'x', 'b', 't'],
-  l: ['i', 't', 'f', 'h', 'r'],
-  m: ['n', 'w', 'h', 'u', 'r'],
-  n: ['m', 'h', 'u', 'r', 'v'],
-  o: ['a', 'c', 'e', 'u', 'q'],
-  p: ['b', 'd', 'q', 'g', 'r'],
-  q: ['p', 'g', 'd', 'o', 'b'],
-  r: ['n', 'v', 'f', 't', 'm'],
-  s: ['c', 'z', 'e', 'a', 'x'],
-  t: ['f', 'l', 'd', 'i', 'r'],
-  u: ['v', 'n', 'o', 'a', 'w'],
-  v: ['u', 'w', 'y', 'r', 'n'],
-  w: ['m', 'v', 'u', 'n', 'y'],
-  x: ['k', 'z', 's', 'v', 'c'],
-  y: ['v', 'g', 'j', 'u', 'i'],
-  z: ['s', 'x', 'c', 'e', 'n']
+  i: ['e', 'y', 'l', 'j', 'u'],
+  j: ['g', 'i', 'y', 'z', 's'],
+  k: ['c', 'q', 'g', 'x'],
+  l: ['i', 't', 'f', 'r'],
+  m: ['n', 'u', 'w', 'b', 'r'],
+  n: ['m', 'u', 'v', 'h', 'r'],
+  o: ['a', 'u', 'e', 'c'],
+  p: ['b', 'd', 'q', 'g', 't', 'r'],
+  q: ['p', 'b', 'd', 'g', 'c', 'k'],
+  r: ['n', 'l', 'v', 't'],
+  s: ['c', 'z', 'x', 't'],
+  t: ['d', 'f', 'p', 'l', 's'],
+  u: ['v', 'n', 'm', 'o', 'a'],
+  v: ['f', 'w', 'u', 'b'],
+  w: ['v', 'm', 'u', 'n'],
+  x: ['s', 'z', 'c', 'k'],
+  y: ['i', 'j', 'u', 'v'],
+  z: ['s', 'c', 'x']
 };
 
 /**
@@ -1136,6 +1136,33 @@ export function suggestNextWeekLabel(words, customStorage) {
   return `Week ${maxWeekNum + 1}`;
 }
 
+const FRENCH_VOWELS = new Set(['a', 'e', 'i', 'o', 'u', 'y', 'à', 'â', 'ä', 'é', 'è', 'ê', 'ë', 'î', 'ï', 'ô', 'ö', 'ù', 'û', 'ü']);
+
+function isFrenchVowel(c) {
+  return FRENCH_VOWELS.has(c);
+}
+
+function isFrenchConsonant(c) {
+  return /^[a-zç]$/i.test(c) && !FRENCH_VOWELS.has(c);
+}
+
+/**
+ * Helper to add weighted trap letters to the pool.
+ * Prevents adding reqChar and strictly obeys vocabHasAccents constraint.
+ * @param {string[]} pool
+ * @param {string} ch
+ * @param {number} count
+ * @param {boolean} vocabHasAccents
+ * @param {string} req
+ */
+function addDistractorTrap(pool, ch, count, vocabHasAccents, req) {
+  if (!ch || ch === req) return;
+  if (ch.charCodeAt(0) > 127 && !vocabHasAccents) return;
+  for (let i = 0; i < count; i++) {
+    pool.push(ch);
+  }
+}
+
 /**
  * Builds a weighted list of plausible lowercase distractor characters for smart bubble spawning.
  * Includes accented variants ONLY if the word list (or current word) uses accented characters,
@@ -1144,12 +1171,17 @@ export function suggestNextWeekLabel(words, customStorage) {
  * @param {string} requiredChar
  * @param {string} currentWord
  * @param {Array<string | { word?: string }>} [allWords=[]]
+ * @param {number} [targetIndex=-1]
  * @returns {string[]}
  */
-export function getPlausibleDistractors(requiredChar, currentWord, allWords = []) {
+export function getPlausibleDistractors(requiredChar, currentWord, allWords = [], targetIndex = -1) {
   const req = String(requiredChar || '').toLowerCase();
   const vocabChars = new Set();
   let vocabHasAccents = false;
+
+  if (req.charCodeAt(0) > 127) {
+    vocabHasAccents = true;
+  }
 
   for (const item of allWords) {
     const w = typeof item === 'string' ? item : item && item.word ? item.word : '';
@@ -1170,16 +1202,160 @@ export function getPlausibleDistractors(requiredChar, currentWord, allWords = []
   /** @type {string[]} */
   const pool = [];
 
-  // 1. Add visually/phonetically plausible neighbor letters with higher weight
+  const chars = Array.from(String(currentWord || '').trim().toLowerCase());
+  const idx = typeof targetIndex === 'number' ? targetIndex : -1;
+  const prevChar = idx > 0 ? chars[idx - 1] : '';
+  const nextChar = idx >= 0 && idx < chars.length - 1 ? chars[idx + 1] : '';
+  const nextNextChar = idx >= 0 && idx < chars.length - 2 ? chars[idx + 2] : '';
   const baseKey = req.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  const neighbors = PLAUSIBLE_LETTER_NEIGHBORS[baseKey] || ['a', 'e', 'i', 'o', 's', 't', 'n', 'r'];
-  for (const n of neighbors) {
-    if (n !== req) {
-      pool.push(n, n);
+
+  // 1. Contextual Nasal Consonant Rule (n <-> m after a vowel / devant m, b, p)
+  if (req === 'm' || req === 'n') {
+    const isAfterVowel = prevChar && isFrenchVowel(prevChar);
+    const isBeforeMBP = nextChar === 'm' || nextChar === 'b' || nextChar === 'p';
+    if (isAfterVowel || isBeforeMBP) {
+      if (req === 'm') {
+        addDistractorTrap(pool, 'n', 7, vocabHasAccents, req);
+      } else {
+        addDistractorTrap(pool, 'm', 7, vocabHasAccents, req);
+      }
     }
   }
 
-  // 2. If the word list uses accented characters, include accented variants as plausible distractors
+  // 2. Double Consonant Trap (L[i] === L[i-1])
+  if (idx > 0 && prevChar === req) {
+    if (nextChar) {
+      addDistractorTrap(pool, nextChar, 7, vocabHasAccents, req);
+    }
+  }
+
+  // 3. Silent Final Consonants (i === chars.length - 1)
+  if (idx === chars.length - 1 && isFrenchConsonant(req)) {
+    const finalSilentTraps = ['t', 'd', 's', 'x', 'p', 'g', 'c', 'z', 'e'];
+    for (const trap of finalSilentTraps) {
+      addDistractorTrap(pool, trap, 5, vocabHasAccents, req);
+    }
+  }
+
+  // 4. Phoneme-Grapheme Matrix (CPG Auditory Traps)
+  // 4.1 [s] and [z] traps
+  if (req === 'c') {
+    addDistractorTrap(pool, 's', 6, vocabHasAccents, req);
+    addDistractorTrap(pool, 'z', 4, vocabHasAccents, req);
+    if (vocabHasAccents) {
+      addDistractorTrap(pool, 'ç', 5, vocabHasAccents, req);
+    }
+  } else if (req === 'ç') {
+    addDistractorTrap(pool, 'c', 6, vocabHasAccents, req);
+    addDistractorTrap(pool, 's', 6, vocabHasAccents, req);
+  } else if (req === 's') {
+    addDistractorTrap(pool, 'c', 5, vocabHasAccents, req);
+    if (vocabHasAccents) {
+      addDistractorTrap(pool, 'ç', 5, vocabHasAccents, req);
+    }
+    if (prevChar && isFrenchVowel(prevChar) && nextChar && isFrenchVowel(nextChar)) {
+      addDistractorTrap(pool, 'z', 6, vocabHasAccents, req);
+      addDistractorTrap(pool, 'c', 6, vocabHasAccents, req);
+    } else {
+      addDistractorTrap(pool, 'z', 4, vocabHasAccents, req);
+    }
+  } else if (req === 'z') {
+    addDistractorTrap(pool, 's', 6, vocabHasAccents, req);
+    addDistractorTrap(pool, 'c', 5, vocabHasAccents, req);
+  }
+
+  // 4.2 [k] and mandatory 'u' after 'q'
+  if (req === 'q') {
+    addDistractorTrap(pool, 'c', 6, vocabHasAccents, req);
+    addDistractorTrap(pool, 'k', 6, vocabHasAccents, req);
+  } else if (req === 'k') {
+    addDistractorTrap(pool, 'c', 6, vocabHasAccents, req);
+    addDistractorTrap(pool, 'q', 6, vocabHasAccents, req);
+  } else if (req === 'c' && (!nextChar || nextChar === 'a' || nextChar === 'o' || nextChar === 'u' || isFrenchConsonant(nextChar))) {
+    addDistractorTrap(pool, 'q', 5, vocabHasAccents, req);
+    addDistractorTrap(pool, 'k', 5, vocabHasAccents, req);
+  }
+
+  if (req === 'u' && prevChar === 'q') {
+    if (nextChar) {
+      addDistractorTrap(pool, nextChar, 14, vocabHasAccents, req);
+    }
+  }
+
+  // 4.3 [ʒ] traps & euphonious 'e' after 'g'
+  if (req === 'g') {
+    addDistractorTrap(pool, 'j', 6, vocabHasAccents, req);
+  } else if (req === 'j') {
+    addDistractorTrap(pool, 'g', 6, vocabHasAccents, req);
+  }
+
+  if (req === 'e' && prevChar === 'g' && (nextChar === 'a' || nextChar === 'o' || nextChar === 'u')) {
+    addDistractorTrap(pool, nextChar, 6, vocabHasAccents, req);
+    addDistractorTrap(pool, 'j', 6, vocabHasAccents, req);
+  }
+
+  // 4.4 Mandatory 'u' omission after 'g' (e.g. guêpe)
+  if (req === 'u' && prevChar === 'g') {
+    if (nextChar) {
+      addDistractorTrap(pool, nextChar, 6, vocabHasAccents, req);
+    }
+    addDistractorTrap(pool, 'e', 6, vocabHasAccents, req);
+    if (vocabHasAccents) {
+      addDistractorTrap(pool, 'ê', 6, vocabHasAccents, req);
+      addDistractorTrap(pool, 'é', 5, vocabHasAccents, req);
+    }
+  }
+
+  // 4.5 [o] traps (eau, au)
+  if (req === 'e' && nextChar === 'a' && nextNextChar === 'u') {
+    addDistractorTrap(pool, 'o', 6, vocabHasAccents, req);
+    addDistractorTrap(pool, 'a', 6, vocabHasAccents, req);
+    if (vocabHasAccents) {
+      addDistractorTrap(pool, 'ô', 5, vocabHasAccents, req);
+    }
+  }
+  if (req === 'a' && nextChar === 'u') {
+    addDistractorTrap(pool, 'o', 6, vocabHasAccents, req);
+    addDistractorTrap(pool, 'e', 6, vocabHasAccents, req);
+    if (vocabHasAccents) {
+      addDistractorTrap(pool, 'ô', 5, vocabHasAccents, req);
+    }
+  }
+
+  // 4.6 [f] traps (f vs p from ph, and voiced v)
+  if (req === 'f') {
+    addDistractorTrap(pool, 'p', 5, vocabHasAccents, req);
+    addDistractorTrap(pool, 'v', 5, vocabHasAccents, req);
+  } else if (req === 'p' && nextChar === 'h') {
+    addDistractorTrap(pool, 'f', 6, vocabHasAccents, req);
+  }
+
+  // 4.7 [e] / [ɛ] variants
+  if (baseKey === 'e' && vocabHasAccents) {
+    const eVariants = ['e', 'é', 'è', 'ê', 'a'];
+    for (const v of eVariants) {
+      addDistractorTrap(pool, v, 6, vocabHasAccents, req);
+    }
+  }
+
+  // 5. Silent H (index 0)
+  if (idx === 0) {
+    if (req === 'h' && nextChar) {
+      addDistractorTrap(pool, nextChar, 7, vocabHasAccents, req);
+    } else if (isFrenchVowel(req)) {
+      addDistractorTrap(pool, 'h', 5, vocabHasAccents, req);
+    }
+  }
+
+  // 6. Plausible Neighbor Letters (Minimal Pairs & Visual Symmetries)
+  const neighbors = PLAUSIBLE_LETTER_NEIGHBORS[baseKey] || ['a', 'e', 'i', 'o', 's', 't', 'n', 'r'];
+  for (const n of neighbors) {
+    if (n !== req) {
+      pool.push(n, n, n, n);
+    }
+  }
+
+  // 7. Accented Families & Vocab Accents
   if (vocabHasAccents) {
     if (ACCENT_FAMILIES[baseKey]) {
       for (const variant of ACCENT_FAMILIES[baseKey]) {
@@ -1195,7 +1371,7 @@ export function getPlausibleDistractors(requiredChar, currentWord, allWords = []
     }
   }
 
-  // 3. Add general lowercase alphabet characters for natural variety
+  // 8. General Lowercase Alphabet
   for (const letter of BASE_LOWERCASE_ALPHABET) {
     if (letter !== req) {
       pool.push(letter);
