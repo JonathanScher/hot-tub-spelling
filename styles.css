@@ -1321,6 +1321,14 @@ body {
   align-items: center;
   justify-content: center;
   padding: 16px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.screen-overlay .welcome-card {
+  margin: auto;
 }
 
 .welcome-card {
@@ -1438,13 +1446,6 @@ body {
   font-size: 1.05rem;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.15));
 }
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.65);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1rem;
-}
 
 .welcome-sync-note {
   margin: 14px 0 0;
@@ -1452,12 +1453,66 @@ body {
   color: var(--ink-muted);
 }
 
+.celebration-card {
+  max-width: 480px;
+  max-height: min(92vh, 720px);
+  max-height: min(92dvh, 720px);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.celebration-card .welcome-mascot-badge {
+  flex-shrink: 0;
+}
+
+.celebration-card .storybook-kicker,
+.celebration-card .welcome-title,
+.celebration-card .welcome-subtitle {
+  flex-shrink: 0;
+}
+
+.celebration-card .big-play-btn {
+  flex-shrink: 0;
+  margin-top: auto;
+}
+
 .complete-word-chips {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
+  align-content: flex-start;
   gap: 7px;
   margin-bottom: 18px;
+  max-height: 220px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px 6px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.42);
+  border: 1.5px solid rgba(196, 154, 113, 0.28);
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(155, 132, 190, 0.5) transparent;
+}
+
+.complete-word-chips::-webkit-scrollbar {
+  width: 6px;
+}
+
+.complete-word-chips::-webkit-scrollbar-track {
+  background: rgba(220, 239, 249, 0.3);
+  border-radius: 999px;
+}
+
+.complete-word-chips::-webkit-scrollbar-thumb {
+  background: rgba(155, 132, 190, 0.45);
+  border-radius: 999px;
+}
+
+.complete-word-chips::-webkit-scrollbar-thumb:hover {
+  background: rgba(155, 132, 190, 0.7);
 }
 
 .word-chip {
