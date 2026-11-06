@@ -17,6 +17,7 @@ export const CURRENT_WEEK_KEY = 'hottub_current_week_label_v2';
 export const PROFILES_METADATA_KEY = 'hottub_profiles_meta_v1';
 export const ACTIVE_PROFILE_KEY = 'hottub_active_profile_v1';
 export const PROFILE_STATS_STORAGE_PREFIX = 'hottub_srs_profile_stats_v1_';
+export const COSMETIC_STARS_PREFIX = 'hottub_stars_';
 
 /**
  * @typedef {object} LearnerProfile
@@ -915,16 +916,64 @@ export function mergeWordsFromCloud(
 }
 
 /**
- * Builds an 8 to 10 word session queue:
+ * Retrieves the cosmetic stars count for a profile.
+ * @param {string} [profileId]
+ * @param {StorageLike} [customStorage]
+ * @returns {number}
+ */
+export function getCosmeticStars(profileId, customStorage) {
+  const store = getStorage(customStorage);
+  const pid = profileId || getActiveProfileId(store);
+  const raw = store.getItem(`${COSMETIC_STARS_PREFIX}${pid}`);
+  const num = parseInt(raw || '0', 10);
+  return Number.isNaN(num) || num < 0 ? 0 : num;
+}
+
+/**
+ * Awards bonus cosmetic stars to a profile.
+ * @param {number} count
+ * @param {string} [profileId]
+ * @param {StorageLike} [customStorage]
+ * @returns {number} The updated total star count
+ */
+export function awardCosmeticStars(count = 1, profileId, customStorage) {
+  const store = getStorage(customStorage);
+  const pid = profileId || getActiveProfileId(store);
+  const current = getCosmeticStars(pid, store);
+  const updated = current + Math.max(0, count);
+  try {
+    store.setItem(`${COSMETIC_STARS_PREFIX}${pid}`, String(updated));
+  } catch {
+    // Ignore storage errors
+  }
+  return updated;
+}
+
+/**
+ * Checks whether all active words for the profile have been reviewed for today (0 due words).
+ * @param {string} [profileId]
+ * @param {StorageLike} [customStorage]
+ * @param {string} [todayIso]
+ * @returns {boolean}
+ */
+export function areAllDueWordsCleared(profileId, customStorage, todayIso) {
+  const summary = getProfileStatsSummary(profileId, customStorage, todayIso);
+  return summary.dueWords === 0;
+}
+
+/**
+ * Builds an 8 to 10 word session queue, or a 3-word Quick Splash queue:
  * - Prioritizes all active words from the current week due for practice,
  *   mixed with past weeks' words due for review based on next_review <= today.
- * - If fewer than 8 words are currently due (e.g., playing an extra practice round),
+ * - In Quick Splash mode (quickSplash: true or mode: 'quick' / 'quickSplash'):
+ *   Extracts at most 3 words, ONLY due words (next_review <= today), without padding.
+ * - In standard mode: If fewer than 8 words are currently due (e.g., playing an extra practice round),
  *   tops up cleanly from current week first, then past weeks, up to 8-10 words.
  *
  * @param {WordRecord[]} [allWords]
  * @param {number} [minWords=8]
  * @param {number} [maxWords=10]
- * @param {{ today?: string, prng?: () => number, storage?: StorageLike, profileId?: string }} [options]
+ * @param {{ today?: string, prng?: () => number, storage?: StorageLike, profileId?: string, quickSplash?: boolean, quick?: boolean, mode?: string }} [options]
  * @returns {WordRecord[]}
  */
 export function buildSessionWords(allWords, minWords = 8, maxWords = 10, options = {}) {
@@ -932,10 +981,18 @@ export function buildSessionWords(allWords, minWords = 8, maxWords = 10, options
   const today = options.today || getLocalISODate();
   const prng = options.prng || Math.random;
   const profileId = options.profileId;
+  const isQuickSplash = Boolean(
+    options.quickSplash ||
+    options.quick ||
+    options.mode === 'quickSplash' ||
+    options.mode === 'quick'
+  );
+  const effectiveMax = isQuickSplash ? 3 : maxWords;
   const sourceWords = allWords !== undefined ? allWords : loadWords(store, today, profileId);
 
   const active = sourceWords.filter((w) => w && w.active !== false && w.word && w.word.length > 0);
   if (active.length === 0) {
+    if (isQuickSplash) return [];
     // CHARACTERIZATION NOTE: When active list is empty, returns slice of starter words without shuffling.
     return getDefaultStarterWords(today).slice(0, maxWords);
   }
@@ -967,7 +1024,7 @@ export function buildSessionWords(allWords, minWords = 8, maxWords = 10, options
 
   /** @param {WordRecord} w */
   const addCandidate = (w) => {
-    if (!pickedSet.has(w.word) && selected.length < maxWords) {
+    if (!pickedSet.has(w.word) && selected.length < effectiveMax) {
       pickedSet.add(w.word);
       selected.push({ ...w });
     }
@@ -976,8 +1033,8 @@ export function buildSessionWords(allWords, minWords = 8, maxWords = 10, options
   // Reserve up to 2 slots for overdue past-week words when current week alone fills >= 9 slots,
   // ensuring past weeks' due reviews always mix into the 8-10 word session.
   const reservedPastSlots =
-    duePast.length > 0 && dueCurrent.length >= maxWords - 1 ? Math.min(2, duePast.length) : 0;
-  const maxCurrentDueSlots = Math.max(0, maxWords - reservedPastSlots);
+    !isQuickSplash && duePast.length > 0 && dueCurrent.length >= effectiveMax - 1 ? Math.min(2, duePast.length) : 0;
+  const maxCurrentDueSlots = Math.max(0, effectiveMax - reservedPastSlots);
 
   for (const w of dueCurrent.slice(0, maxCurrentDueSlots)) {
     addCandidate(w);
@@ -985,20 +1042,22 @@ export function buildSessionWords(allWords, minWords = 8, maxWords = 10, options
   for (const w of duePast) {
     addCandidate(w);
   }
-  // If room remains and dueCurrent had more items, fill up to maxWords
+  // If room remains and dueCurrent had more items, fill up to effectiveMax
   for (const w of dueCurrent.slice(maxCurrentDueSlots)) {
     addCandidate(w);
   }
 
   // If total due words < minWords (8), top up to min(minWords, active.length) for a full session
-  const targetMin = Math.min(minWords, active.length);
-  if (selected.length < targetMin) {
-    const extraCurrent = currentWeekWords.filter((w) => !pickedSet.has(w.word)).sort(sortByUrgency);
-    const extraPast = pastWeekWords.filter((w) => !pickedSet.has(w.word)).sort(sortByUrgency);
+  if (!isQuickSplash) {
+    const targetMin = Math.min(minWords, active.length);
+    if (selected.length < targetMin) {
+      const extraCurrent = currentWeekWords.filter((w) => !pickedSet.has(w.word)).sort(sortByUrgency);
+      const extraPast = pastWeekWords.filter((w) => !pickedSet.has(w.word)).sort(sortByUrgency);
 
-    for (const w of [...extraCurrent, ...extraPast]) {
-      if (selected.length >= targetMin) break;
-      addCandidate(w);
+      for (const w of [...extraCurrent, ...extraPast]) {
+        if (selected.length >= targetMin) break;
+        addCandidate(w);
+      }
     }
   }
 

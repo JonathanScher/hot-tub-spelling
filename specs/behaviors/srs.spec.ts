@@ -307,6 +307,96 @@ describe('SRS & Vocabulary Store Mechanics (js/srs.js)', () => {
       expect(pickedNames.has('past2')).toBe(true);
       expect(pickedNames.has('past3')).toBe(false);
     });
+
+    it('builds a Quick Splash session with max 3 words and only due words when quickSplash is true', () => {
+      // GIVEN 5 due words (3 Week 8, 2 Week 7) and 5 future words
+      const storage = createIsolatedStorage();
+      const today = '2026-11-01';
+      const future = '2026-11-05';
+      setCurrentWeekLabel('Week 8', storage);
+
+      const words: WordRecord[] = [
+        normalizeWordRecord({ word: 'w8_due1', week_label: 'Week 8', box: 1, next_review: today }, 'Week 8', today),
+        normalizeWordRecord({ word: 'w8_due2', week_label: 'Week 8', box: 1, next_review: today }, 'Week 8', today),
+        normalizeWordRecord({ word: 'w8_due3', week_label: 'Week 8', box: 1, next_review: today }, 'Week 8', today),
+        normalizeWordRecord({ word: 'w7_due1', week_label: 'Week 7', box: 1, next_review: today }, 'Week 7', today),
+        normalizeWordRecord({ word: 'w7_due2', week_label: 'Week 7', box: 1, next_review: today }, 'Week 7', today),
+        normalizeWordRecord({ word: 'w8_fut1', week_label: 'Week 8', box: 2, next_review: future }, 'Week 8', today),
+        normalizeWordRecord({ word: 'w8_fut2', week_label: 'Week 8', box: 3, next_review: future }, 'Week 8', today),
+        normalizeWordRecord({ word: 'w7_fut1', week_label: 'Week 7', box: 2, next_review: future }, 'Week 7', today),
+        normalizeWordRecord({ word: 'w7_fut2', week_label: 'Week 7', box: 3, next_review: future }, 'Week 7', today),
+        normalizeWordRecord({ word: 'w7_fut3', week_label: 'Week 7', box: 4, next_review: future }, 'Week 7', today)
+      ];
+
+      // WHEN building with quickSplash: true
+      const session = buildSessionWords(words, 8, 10, { today, quickSplash: true, storage });
+
+      // THEN exactly 3 words are pulled, all are due today, and no future words are included
+      expect(session).toHaveLength(3);
+      for (const w of session) {
+        expect(w.next_review <= today).toBe(true);
+        expect(w.word.startsWith('w8_fut') || w.word.startsWith('w7_fut')).toBe(false);
+      }
+    });
+
+    it('does NOT pad the queue in Quick Splash mode when fewer than 3 words are due', () => {
+      // GIVEN words where only 2 are due today (and 6 are non-due)
+      const storage = createIsolatedStorage();
+      const today = '2026-11-01';
+      const future = '2026-11-08';
+      setCurrentWeekLabel('Week 8', storage);
+
+      const wordsTwoDue: WordRecord[] = [
+        normalizeWordRecord({ word: 'due1', week_label: 'Week 8', box: 1, next_review: today }, 'Week 8', today),
+        normalizeWordRecord({ word: 'due2', week_label: 'Week 8', box: 2, next_review: today }, 'Week 8', today),
+        normalizeWordRecord({ word: 'fut1', week_label: 'Week 8', box: 3, next_review: future }, 'Week 8', today),
+        normalizeWordRecord({ word: 'fut2', week_label: 'Week 8', box: 4, next_review: future }, 'Week 8', today),
+        normalizeWordRecord({ word: 'fut3', week_label: 'Week 8', box: 5, next_review: future }, 'Week 8', today),
+        normalizeWordRecord({ word: 'fut4', week_label: 'Week 7', box: 2, next_review: future }, 'Week 7', today),
+        normalizeWordRecord({ word: 'fut5', week_label: 'Week 7', box: 3, next_review: future }, 'Week 7', today),
+        normalizeWordRecord({ word: 'fut6', week_label: 'Week 7', box: 4, next_review: future }, 'Week 7', today)
+      ];
+
+      // WHEN building Quick Splash session with only 2 words due
+      const sessionTwo = buildSessionWords(wordsTwoDue, 8, 10, { today, quickSplash: true, storage });
+
+      // THEN only the 2 due words are returned without any padding
+      expect(sessionTwo).toHaveLength(2);
+      expect(sessionTwo.map((w) => w.word).sort()).toEqual(['due1', 'due2']);
+
+      // GIVEN words where only 1 is due today
+      const wordsOneDue = [wordsTwoDue[0], ...wordsTwoDue.slice(2)];
+      const sessionOne = buildSessionWords(wordsOneDue, 8, 10, { today, quickSplash: true, storage });
+      expect(sessionOne).toHaveLength(1);
+      expect(sessionOne[0].word).toBe('due1');
+
+      // GIVEN words where 0 are due today
+      const wordsNoneDue = wordsTwoDue.slice(2);
+      const sessionZero = buildSessionWords(wordsNoneDue, 8, 10, { today, quickSplash: true, storage });
+      expect(sessionZero).toHaveLength(0);
+    });
+
+    it('supports Quick Splash via options.mode = "quick" or "quickSplash"', () => {
+      const storage = createIsolatedStorage();
+      const today = '2026-11-01';
+      const future = '2026-11-10';
+
+      const words: WordRecord[] = [
+        normalizeWordRecord({ word: 'dueA', week_label: 'Week 8', box: 1, next_review: today }, 'Week 8', today),
+        normalizeWordRecord({ word: 'dueB', week_label: 'Week 8', box: 1, next_review: today }, 'Week 8', today),
+        normalizeWordRecord({ word: 'dueC', week_label: 'Week 8', box: 1, next_review: today }, 'Week 8', today),
+        normalizeWordRecord({ word: 'dueD', week_label: 'Week 8', box: 1, next_review: today }, 'Week 8', today),
+        normalizeWordRecord({ word: 'futureA', week_label: 'Week 8', box: 2, next_review: future }, 'Week 8', today)
+      ];
+
+      const resMode1 = buildSessionWords(words, 8, 10, { today, mode: 'quickSplash', storage });
+      const resMode2 = buildSessionWords(words, 8, 10, { today, mode: 'quick', storage });
+
+      expect(resMode1).toHaveLength(3);
+      expect(resMode2).toHaveLength(3);
+      expect(resMode1.every((w) => w.next_review <= today)).toBe(true);
+      expect(resMode2.every((w) => w.next_review <= today)).toBe(true);
+    });
   });
 
   describe('Cloud Merge, Weekly Additions & Plausible Distractors', () => {

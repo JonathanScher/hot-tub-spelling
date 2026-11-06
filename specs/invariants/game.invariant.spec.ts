@@ -12,7 +12,8 @@ import {
   getDefaultStarterWords,
   normalizeWordRecord,
   computeFirstAttemptSRSUpdate,
-  getPlausibleDistractors
+  getPlausibleDistractors,
+  buildSessionWords
 } from '../../js/srs.js';
 
 /**
@@ -320,6 +321,57 @@ describe('Property-Based Invariant Suite (fast-check)', () => {
         }
       ),
       { numRuns: 100 }
+    );
+  });
+
+  it('guarantees Quick Splash mode invariants: max 3 words, strictly due words, and zero padding', () => {
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.record({
+            word: fc.stringMatching(/^[a-z]{3,8}$/),
+            dueOffset: fc.integer({ min: -5, max: 5 }),
+            active: fc.boolean()
+          }),
+          { minLength: 1, maxLength: 20 }
+        ),
+        (rawItems) => {
+          const today = '2026-11-01';
+          const words = rawItems.map((item, idx) => {
+            const nextReview = item.dueOffset <= 0 ? '2026-11-01' : '2026-11-10';
+            return normalizeWordRecord(
+              {
+                word: `${item.word}_${idx}`,
+                week_label: 'Week 8',
+                active: item.active,
+                next_review: nextReview
+              },
+              'Week 8',
+              today
+            );
+          });
+
+          const dueWords = words.filter((w) => w.active !== false && (!w.next_review || w.next_review <= today));
+          const session = buildSessionWords(words, 8, 10, { today, quickSplash: true });
+
+          // Invariant 1: At most 3 words
+          expect(session.length).toBeLessThanOrEqual(3);
+
+          // Invariant 2: Exactly min(3, dueWords.length) (NO padding with non-due words)
+          expect(session.length).toBe(Math.min(3, dueWords.length));
+
+          // Invariant 3: All words in session must be due words
+          for (const w of session) {
+            expect(w.active).not.toBe(false);
+            expect(!w.next_review || w.next_review <= today).toBe(true);
+          }
+
+          // Invariant 4: All words in session must be unique
+          const uniqueWords = new Set(session.map((w) => w.word));
+          expect(uniqueWords.size).toBe(session.length);
+        }
+      ),
+      { numRuns: 50 }
     );
   });
 });
