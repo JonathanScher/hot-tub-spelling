@@ -37,6 +37,7 @@ import {
   useHintOnState,
   isSlotWatermarkVisible,
   handleBubbleTapOnState,
+  handleBubbleFlickOnState,
   clampDeltaTime,
   getNextUnfilledIndex
 } from './game-core.js';
@@ -69,6 +70,7 @@ export class HotTubGame {
    * @param {(summary: import('./game-core.js').SessionSummary) => void} [config.onSessionComplete]
    * @param {number} [config.seed] - Optional seed for deterministic PRNG
    * @param {import('./prng.js').SeededPRNG | (() => number)} [config.prng] - Optional injectable PRNG
+   * @param {boolean} [config.impostorMode]
    */
   constructor(config = {}) {
     this.stage = config.bubbleStage || null;
@@ -141,6 +143,15 @@ export class HotTubGame {
     this.mascotHideTimeout = null;
     this.bubbleImgAvailable = true;
 
+    this.combo = 0;
+    this.impostorCombo = 0;
+    this.impostorPops = 0;
+    this.maxCombo = 0;
+    this.impostorMode = config.impostorMode !== false;
+    this.comboBarEl = typeof document !== 'undefined' ? document.getElementById('companion-combo-bar') : null;
+    this.comboCountEl = typeof document !== 'undefined' ? document.getElementById('combo-count') : null;
+    this.comboMeterFillEl = typeof document !== 'undefined' ? document.getElementById('combo-meter-fill') : null;
+
     const bounds = this._getStageBounds();
     this.stageWidth = bounds.width;
     this.stageHeight = bounds.height;
@@ -208,6 +219,12 @@ export class HotTubGame {
     this.sessionSummary = null;
     this.lastCheerMessage = null;
     this.trapHistory = getProfileTrapHistory();
+
+    this.combo = 0;
+    this.impostorCombo = 0;
+    this.impostorPops = 0;
+    this.maxCombo = 0;
+    this._updateComboUI();
 
     this.running = true;
     this.paused = false;
@@ -513,6 +530,112 @@ export class HotTubGame {
   }
 
   /**
+   * Public interface to flick a bubble (Impostor Pop mechanic).
+   * @param {number | import('./game-core.js').BubbleEntity} bubbleOrId
+   * @param {{ dx?: number, dy?: number } | null} [gesture=null]
+   */
+  flickBubble(bubbleOrId, gesture = null) {
+    const bubble =
+      typeof bubbleOrId === 'number'
+        ? this.bubbles.find((b) => b.id === bubbleOrId)
+        : bubbleOrId;
+    if (!bubble) return { handled: false, isDistractor: false };
+    return this._handleBubbleFlick(bubble, gesture);
+  }
+
+  /**
+   * @param {import('./game-core.js').BubbleEntity} bubble
+   * @param {{ dx?: number, dy?: number } | null} [gesture=null]
+   */
+  _handleBubbleFlick(bubble, gesture = null) {
+    if (
+      !this.running ||
+      this.paused ||
+      this.wordTransitioning ||
+      bubble.state !== 'floating' ||
+      this.currentIndex >= this.targetChars.length
+    ) {
+      return { handled: false, isDistractor: false };
+    }
+
+    const res = handleBubbleFlickOnState(this, bubble);
+    if (!res.handled || !res.isDistractor) {
+      // Accidental flick on target letter: shield visual cue
+      if (bubble.el) {
+        bubble.el.classList.remove('is-shielded');
+        void bubble.el.offsetWidth;
+        bubble.el.classList.add('is-shielded');
+        setTimeout(() => {
+          if (bubble.el) bubble.el.classList.remove('is-shielded');
+        }, 400);
+      }
+      return res;
+    }
+
+    this._onDistractorFlicked(bubble, gesture, res);
+    return res;
+  }
+
+  /**
+   * @param {import('./game-core.js').BubbleEntity} bubble
+   * @param {{ dx?: number, dy?: number } | null} gesture
+   * @param {any} res
+   */
+  _onDistractorFlicked(bubble, gesture, res) {
+    if (typeof soundEngine.playFlickWhoosh === 'function') {
+      soundEngine.playFlickWhoosh();
+    } else {
+      soundEngine.playBubblePop(2);
+    }
+
+    if (bubble.el) {
+      bubble.el.classList.add('is-flicked-away');
+      if (gesture && (gesture.dx || gesture.dy)) {
+        const angle = Math.atan2(gesture.dy, gesture.dx);
+        const dist = 180;
+        const tx = Math.cos(angle) * dist;
+        const ty = Math.sin(angle) * dist;
+        bubble.el.style.transform = `translate(${bubble.x - bubble.radius + tx}px, ${bubble.y - bubble.radius + ty}px) scale(0.2) rotate(${angle * 57.3}deg)`;
+        bubble.el.style.opacity = '0';
+      }
+    }
+    setTimeout(() => this._removeBubble(bubble), 240);
+
+    // Feed bath companion mascot and praise impulse inhibition
+    this._nudgeMascotHappy();
+    const companionCheers = [
+      'Yum! Distractor splashed!',
+      'Flicked!',
+      'Great impulse control!',
+      'Trap avoided!',
+      'Yummy letter snack!',
+      'Sharp eye!'
+    ];
+    const cheer = companionCheers[Math.floor(this.prng() * companionCheers.length)];
+    this._showMascotMessage(cheer, 1800);
+
+    this._updateComboUI();
+  }
+
+  _updateComboUI() {
+    if (this.comboCountEl) {
+      this.comboCountEl.textContent = String(this.impostorCombo || this.combo || 0);
+    }
+    if (this.comboMeterFillEl) {
+      const count = this.impostorCombo || 0;
+      const pct = Math.min(100, (count / 5) * 100);
+      this.comboMeterFillEl.style.width = `${pct}%`;
+    }
+    if (this.comboBarEl) {
+      if ((this.impostorCombo || 0) > 0) {
+        this.comboBarEl.classList.add('is-active');
+      } else {
+        this.comboBarEl.classList.remove('is-active');
+      }
+    }
+  }
+
+  /**
    * @param {import('./game-core.js').BubbleEntity} bubble
    */
   _handleBubbleTap(bubble) {
@@ -553,6 +676,12 @@ export class HotTubGame {
     const matchedSlotIndex = /** @type {number} */ (res.matchedSlotIndex);
     const matchedChar = /** @type {string} */ (res.matchedChar);
 
+    this.combo = (this.combo || 0) + 1;
+    if (this.combo > this.maxCombo) {
+      this.maxCombo = this.combo;
+    }
+    this._updateComboUI();
+
     soundEngine.playBubblePop(matchedSlotIndex);
     this._spawnPopDroplets(bubble.x, bubble.y, bubble.diameter);
 
@@ -585,6 +714,9 @@ export class HotTubGame {
     if (res.trapCategory) {
       recordTrapError(res.trapCategory);
     }
+    this.combo = 0;
+    this.impostorCombo = 0;
+    this._updateComboUI();
 
     soundEngine.playWrongFizzle();
 

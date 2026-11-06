@@ -116,6 +116,11 @@ export const CHEER_MESSAGES_PRACTICE = [
  * @property {number} targetSpawnIn
  * @property {number} stageWidth
  * @property {number} stageHeight
+ * @property {number} combo
+ * @property {number} impostorCombo
+ * @property {number} impostorPops
+ * @property {number} maxCombo
+ * @property {boolean} [impostorMode]
  * @property {string | null} lastCheerMessage
  * @property {SessionSummary | null} sessionSummary
  * @property {import('./prng.js').SeededPRNG} prng
@@ -132,6 +137,7 @@ export const CHEER_MESSAGES_PRACTICE = [
  * @property {boolean} [autoStart=false]
  * @property {Record<string, number>} [trapHistory]
  * @property {any} [profile]
+ * @property {boolean} [impostorMode]
  */
 
 /**
@@ -139,6 +145,8 @@ export const CHEER_MESSAGES_PRACTICE = [
  *   | { type: 'TICK', dt?: number }
  *   | { type: 'START_SESSION', sessionWords: Array<any>, allVocabWords?: Array<any> }
  *   | { type: 'TAP_BUBBLE', bubbleId: number }
+ *   | { type: 'FLICK_BUBBLE', bubbleId: number }
+ *   | { type: 'SWIPE_BUBBLE', bubbleId: number }
  *   | { type: 'USE_HINT' }
  *   | { type: 'COMPLETE_WORD' }
  *   | { type: 'REMOVE_BUBBLE', bubbleId: number }
@@ -250,6 +258,11 @@ export function cloneGameState(state) {
     targetSpawnIn: state.targetSpawnIn,
     stageWidth: state.stageWidth,
     stageHeight: state.stageHeight,
+    combo: typeof state.combo === 'number' ? state.combo : 0,
+    impostorCombo: typeof state.impostorCombo === 'number' ? state.impostorCombo : 0,
+    impostorPops: typeof state.impostorPops === 'number' ? state.impostorPops : 0,
+    maxCombo: typeof state.maxCombo === 'number' ? state.maxCombo : 0,
+    impostorMode: state.impostorMode !== false,
     lastCheerMessage: state.lastCheerMessage,
     sessionSummary: state.sessionSummary
       ? {
@@ -311,6 +324,11 @@ export function createGameState(config = {}) {
     targetSpawnIn: 0,
     stageWidth,
     stageHeight,
+    combo: 0,
+    impostorCombo: 0,
+    impostorPops: 0,
+    maxCombo: 0,
+    impostorMode: config.impostorMode !== false,
     lastCheerMessage: null,
     sessionSummary: null,
     prng
@@ -587,6 +605,10 @@ export function startSessionOnState(state, sessionWords, allVocabularyWords = se
   state.masteredCount = 0;
   state.firstAttemptRecorded.clear();
   state.sessionResults = [];
+  state.combo = 0;
+  state.impostorCombo = 0;
+  state.impostorPops = 0;
+  state.maxCombo = 0;
   state.sessionSummary = null;
   state.lastCheerMessage = null;
 
@@ -777,6 +799,10 @@ export function handleBubbleTapOnState(state, bubbleOrId) {
     if (!state.fullWordWatermark) {
       state.watermarkActive = false;
     }
+    state.combo = (state.combo || 0) + 1;
+    if (state.combo > (state.maxCombo || 0)) {
+      state.maxCombo = state.combo;
+    }
 
     /** @type {BubbleEntity[]} */
     const urgentSpawned = [];
@@ -839,6 +865,8 @@ export function handleBubbleTapOnState(state, bubbleOrId) {
     };
   } else {
     bubble.state = 'fizzling';
+    state.combo = 0;
+    state.impostorCombo = 0;
     state.wordErrorCount += 1;
     state.letterErrorCount += 1;
     if (!state.wrongTapsOnWord) state.wrongTapsOnWord = [];
@@ -873,6 +901,72 @@ export function handleBubbleTapOnState(state, bubbleOrId) {
       trapCategory,
       wordCompleted: false,
       autoWatermarkTriggered
+    };
+  }
+}
+
+/**
+ * Processes flicking/swiping a bubble on `state` (Impostor Pop mechanic).
+ * Flicking a distractor removes the distractor and rewards impulse control (incrementing `combo`, `impostorCombo`, `impostorPops`)
+ * without triggering an error tap penalty.
+ * Flicking a required target letter is shielded (does not pop as an impostor and does not add error).
+ *
+ * @param {GameState} state
+ * @param {number | BubbleEntity} bubbleOrId
+ * @returns {{
+ *   handled: boolean,
+ *   isDistractor: boolean,
+ *   bubble?: BubbleEntity,
+ *   combo?: number,
+ *   impostorCombo?: number,
+ *   impostorPops?: number,
+ *   targetShielded?: boolean
+ * }}
+ */
+export function handleBubbleFlickOnState(state, bubbleOrId) {
+  const bubble =
+    typeof bubbleOrId === 'number'
+      ? state.bubbles.find((b) => b.id === bubbleOrId)
+      : bubbleOrId;
+
+  if (
+    !bubble ||
+    !state.running ||
+    state.paused ||
+    state.wordTransitioning ||
+    bubble.state !== 'floating' ||
+    state.currentIndex >= state.targetChars.length
+  ) {
+    return { handled: false, isDistractor: false };
+  }
+
+  const targetChar = state.targetChars[state.currentIndex];
+  const isDistractor = bubble.char !== targetChar;
+
+  if (isDistractor) {
+    bubble.state = 'popping';
+    state.impostorCombo = (state.impostorCombo || 0) + 1;
+    state.combo = (state.combo || 0) + 1;
+    state.impostorPops = (state.impostorPops || 0) + 1;
+    if (state.combo > (state.maxCombo || 0)) {
+      state.maxCombo = state.combo;
+    }
+
+    return {
+      handled: true,
+      isDistractor: true,
+      bubble,
+      combo: state.combo,
+      impostorCombo: state.impostorCombo,
+      impostorPops: state.impostorPops
+    };
+  } else {
+    // Shield the target letter so child does not accidentally discard the required letter
+    return {
+      handled: false,
+      isDistractor: false,
+      bubble,
+      targetShielded: true
     };
   }
 }
@@ -1140,6 +1234,14 @@ export function stepGame(initialState, action = null, dt = 0) {
       }
       case 'USE_HINT': {
         useHintOnState(nextState);
+        break;
+      }
+      case 'FLICK_BUBBLE':
+      case 'SWIPE_BUBBLE': {
+        const res = handleBubbleFlickOnState(nextState, action.bubbleId);
+        if (res.handled && res.bubble) {
+          removeBubbleOnState(nextState, res.bubble.id);
+        }
         break;
       }
       case 'TAP_BUBBLE': {
