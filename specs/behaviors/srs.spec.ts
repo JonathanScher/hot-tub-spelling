@@ -17,6 +17,9 @@ import {
   buildSessionWords,
   computeFirstAttemptSRSUpdate,
   recordFirstAttemptSRS,
+  isUnaccentedLookalike,
+  isAdjacentLetter,
+  isMotorSlip,
   addWeeklyWordList,
   removeWordFromStore,
   suggestNextWeekLabel,
@@ -228,6 +231,246 @@ describe('SRS & Vocabulary Store Mechanics (js/srs.js)', () => {
       // THEN both return null without mutating stored words
       expect(resEmpty).toBeNull();
       expect(resUnknown).toBeNull();
+    });
+
+    it('softens Leitner reset for a single motor slip (unaccented lookalike): drops 1 box (max(1, box - 1)) and sets interval accordingly', () => {
+      // GIVEN a word currently at Box 5 with streak 4 and 4/4 correct attempts
+      const current: WordRecord = {
+        word: 'câlin',
+        week_label: 'Week 8',
+        active: true,
+        box: 5,
+        next_review: '2026-11-01',
+        streak: 4,
+        total_attempts: 4,
+        correct_attempts: 4,
+        custom_audio_url: ''
+      };
+
+      // WHEN firstAttemptErrors is 1 on 2026-11-01 and the wrong tap was an unaccented lookalike ('a' instead of 'â')
+      const updated = computeFirstAttemptSRSUpdate(current, 1, '2026-11-01', {
+        wrongTap: 'a',
+        targetChar: 'â',
+        targetIndex: 1
+      });
+
+      // THEN box drops by 1 (5 -> 4), streak adjusts to 3, next_review is +7d (2026-11-08, BOX_INTERVALS[4]), correct_attempts stays 4, total_attempts is 5
+      expect(updated).toEqual({
+        ...current,
+        box: 4,
+        next_review: '2026-11-08',
+        streak: 3,
+        total_attempts: 5,
+        correct_attempts: 4
+      });
+    });
+
+    it('softens Leitner reset for a single motor slip (adjacent letter in word): drops 1 box (max(1, box - 1))', () => {
+      // GIVEN a word currently at Box 4 with streak 3
+      const current: WordRecord = {
+        word: 'câlin',
+        week_label: 'Week 8',
+        active: true,
+        box: 4,
+        next_review: '2026-11-01',
+        streak: 3,
+        total_attempts: 3,
+        correct_attempts: 3,
+        custom_audio_url: ''
+      };
+
+      // WHEN firstAttemptErrors is 1 on 2026-11-01 and the wrong tap was the adjacent letter ('l' tapped when 'â' was expected at index 1)
+      const updated = computeFirstAttemptSRSUpdate(current, 1, '2026-11-01', {
+        wrongTap: 'l',
+        targetChar: 'â',
+        targetIndex: 1
+      });
+
+      // THEN box drops by 1 (4 -> 3), streak adjusts to 2, next_review is +4d (2026-11-05, BOX_INTERVALS[3]), total_attempts is 4
+      expect(updated).toEqual({
+        ...current,
+        box: 3,
+        next_review: '2026-11-05',
+        streak: 2,
+        total_attempts: 4,
+        correct_attempts: 3
+      });
+    });
+
+    it('clamps softened box drop at Box 1 when a word in Box 1 has a motor slip', () => {
+      // GIVEN a word currently at Box 1 with streak 0
+      const current: WordRecord = {
+        word: 'été',
+        week_label: 'Week 8',
+        active: true,
+        box: 1,
+        next_review: '2026-11-01',
+        streak: 0,
+        total_attempts: 1,
+        correct_attempts: 0,
+        custom_audio_url: ''
+      };
+
+      // WHEN firstAttemptErrors is 1 with unaccented lookalike ('e' instead of 'é')
+      const updated = computeFirstAttemptSRSUpdate(current, 1, '2026-11-01', {
+        wrongTap: 'e',
+        targetChar: 'é',
+        targetIndex: 0
+      });
+
+      // THEN box remains 1 (max(1, 1 - 1) = 1), streak remains 0, next_review is +1d (2026-11-02)
+      expect(updated.box).toBe(1);
+      expect(updated.streak).toBe(0);
+      expect(updated.next_review).toBe('2026-11-02');
+      expect(updated.total_attempts).toBe(2);
+    });
+
+    it('resets to Box 1 when firstAttemptErrors is 1 but the hint watermark was used', () => {
+      // GIVEN a word currently at Box 4 with streak 3
+      const current: WordRecord = {
+        word: 'soleil',
+        week_label: 'Week 7',
+        active: true,
+        box: 4,
+        next_review: '2026-11-01',
+        streak: 3,
+        total_attempts: 3,
+        correct_attempts: 3,
+        custom_audio_url: ''
+      };
+
+      // WHEN firstAttemptErrors is 1 because the hint watermark was used
+      const updated = computeFirstAttemptSRSUpdate(current, 1, '2026-11-01', {
+        hintWatermarkUsed: true
+      });
+
+      // THEN box drops all the way to 1, streak resets to 0, next_review is +1d
+      expect(updated).toEqual({
+        ...current,
+        box: 1,
+        next_review: '2026-11-02',
+        streak: 0,
+        total_attempts: 4,
+        correct_attempts: 3
+      });
+    });
+
+    it('resets to Box 1 when firstAttemptErrors is 1 but the wrong tap is a spelling gap (not a lookalike or adjacent letter)', () => {
+      // GIVEN a word currently at Box 4 with streak 3
+      const current: WordRecord = {
+        word: 'câlin',
+        week_label: 'Week 8',
+        active: true,
+        box: 4,
+        next_review: '2026-11-01',
+        streak: 3,
+        total_attempts: 3,
+        correct_attempts: 3,
+        custom_audio_url: ''
+      };
+
+      // WHEN firstAttemptErrors is 1 because of a completely unrelated letter ('z' tapped for 'c')
+      const updated = computeFirstAttemptSRSUpdate(current, 1, '2026-11-01', {
+        wrongTap: 'z',
+        targetChar: 'c',
+        targetIndex: 0
+      });
+
+      // THEN box drops all the way to 1, streak resets to 0, next_review is +1d
+      expect(updated).toEqual({
+        ...current,
+        box: 1,
+        next_review: '2026-11-02',
+        streak: 0,
+        total_attempts: 4,
+        correct_attempts: 3
+      });
+    });
+
+    it('resets to Box 1 when firstAttemptErrors is 2 or more, even if one wrong tap was a lookalike', () => {
+      // GIVEN a word currently at Box 5 with streak 4
+      const current: WordRecord = {
+        word: 'câlin',
+        week_label: 'Week 8',
+        active: true,
+        box: 5,
+        next_review: '2026-11-01',
+        streak: 4,
+        total_attempts: 4,
+        correct_attempts: 4,
+        custom_audio_url: ''
+      };
+
+      // WHEN firstAttemptErrors is 2 (e.g. wrong lookalike 'a' then wrong letter 'z')
+      const updated = computeFirstAttemptSRSUpdate(current, 2, '2026-11-01', {
+        wrongTaps: [
+          { tappedChar: 'a', targetChar: 'â' },
+          { tappedChar: 'z', targetChar: 'â' }
+        ]
+      });
+
+      // THEN box drops all the way to 1, streak resets to 0, next_review is +1d
+      expect(updated).toEqual({
+        ...current,
+        box: 1,
+        next_review: '2026-11-02',
+        streak: 0,
+        total_attempts: 5,
+        correct_attempts: 4
+      });
+    });
+
+    it('softens Box reset via recordFirstAttemptSRS when options convey a motor slip', () => {
+      const storage = createIsolatedStorage();
+      const today = '2026-11-01';
+      // Seed storage with "câlin" promoted to Box 5
+      loadWords(storage, today);
+      recordFirstAttemptSRS('câlin', 0, { today: '2026-11-01', storage });
+      recordFirstAttemptSRS('câlin', 0, { today: '2026-11-03', storage });
+      recordFirstAttemptSRS('câlin', 0, { today: '2026-11-07', storage });
+      const box5Rec = recordFirstAttemptSRS('câlin', 0, { today: '2026-11-14', storage })!;
+      expect(box5Rec.box).toBe(5);
+
+      // Now record a single motor slip on 2026-11-28
+      const slipRec = recordFirstAttemptSRS('câlin', 1, {
+        today: '2026-11-28',
+        storage,
+        wrongTap: 'a',
+        targetChar: 'â'
+      })!;
+
+      expect(slipRec.box).toBe(4);
+      expect(slipRec.next_review).toBe('2026-12-05'); // 2026-11-28 + 7 days
+      expect(slipRec.streak).toBe(3);
+    });
+  });
+
+  describe('Motor Slip Classification: Lookalikes and Adjacent Letters (isUnaccentedLookalike, isAdjacentLetter, isMotorSlip)', () => {
+    it('identifies unaccented lookalikes (a vs à/â, e vs é/è/ê, c vs ç) and rejects identical or distinct base letters', () => {
+      expect(isUnaccentedLookalike('a', 'à')).toBe(true);
+      expect(isUnaccentedLookalike('a', 'â')).toBe(true);
+      expect(isUnaccentedLookalike('e', 'é')).toBe(true);
+      expect(isUnaccentedLookalike('é', 'è')).toBe(true);
+      expect(isUnaccentedLookalike('c', 'ç')).toBe(true);
+      expect(isUnaccentedLookalike('a', 'a')).toBe(false); // same char
+      expect(isUnaccentedLookalike('a', 'b')).toBe(false); // different base
+    });
+
+    it('identifies adjacent letters in the word being spelled (both previous and next letter)', () => {
+      // In word "câlin", target is 'â' at index 1: adjacent letters in word are 'c' and 'l'
+      expect(isAdjacentLetter('c', 'â', 'câlin', 1)).toBe(true);
+      expect(isAdjacentLetter('l', 'â', 'câlin', 1)).toBe(true);
+      // 'n' is at index 4 (not adjacent to index 1)
+      expect(isAdjacentLetter('n', 'â', 'câlin', 1)).toBe(false);
+    });
+
+    it('classifies motor slips accurately using isMotorSlip helper', () => {
+      expect(isMotorSlip({ errors: 1, wrongTap: 'a', targetChar: 'â' })).toBe(true);
+      expect(isMotorSlip({ errors: 1, wrongTap: 'l', targetChar: 'â', word: 'câlin', targetIndex: 1 })).toBe(true);
+      expect(isMotorSlip({ errors: 1, wrongTap: 'z', targetChar: 'c' })).toBe(false);
+      expect(isMotorSlip({ errors: 1, hintWatermarkUsed: true })).toBe(false);
+      expect(isMotorSlip({ errors: 2, wrongTap: 'a', targetChar: 'â' })).toBe(false);
+      expect(isMotorSlip({ errors: 0 })).toBe(false);
     });
   });
 

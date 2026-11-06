@@ -26,6 +26,7 @@ import {
   ensureSeededPRNG,
   createGameState,
   stepGame,
+  isMotorSlip,
   computeBubbleDiameter,
   chooseNextBubbleCharOnState,
   pickNonOverlappingXOnState,
@@ -58,7 +59,7 @@ export class HotTubGame {
    * @param {HTMLElement | null} [config.progressFill] - Progress bar / pebbles container
    * @param {HTMLElement | null} [config.progressLabel] - Text label e.g. "3 / 8"
    * @param {HTMLElement | null} [config.retryBadge] - Subtle badge shown when revisiting a word in-session
-   * @param {(wordStr: string, firstAttemptErrors: number) => void} [config.onFirstAttemptComplete]
+   * @param {(wordStr: string, firstAttemptErrors: number, attemptDetails?: any) => void} [config.onFirstAttemptComplete]
    * @param {(summary: import('./game-core.js').SessionSummary) => void} [config.onSessionComplete]
    * @param {number} [config.seed] - Optional seed for deterministic PRNG
    * @param {import('./prng.js').SeededPRNG | (() => number)} [config.prng] - Optional injectable PRNG
@@ -109,6 +110,8 @@ export class HotTubGame {
     this.wordErrorCount = 0;
     this.letterErrorCount = 0;
     this.watermarkActive = false;
+    this.hintWatermarkUsed = false;
+    this.wrongTapsOnWord = [];
     this.wordTransitioning = false;
     this.running = false;
     this.paused = false;
@@ -280,6 +283,8 @@ export class HotTubGame {
     this.wordErrorCount = 0;
     this.letterErrorCount = 0;
     this.watermarkActive = false;
+    this.hintWatermarkUsed = false;
+    this.wrongTapsOnWord = [];
     this.wordTransitioning = false;
     this.spawnCounter = 0;
     this.spawnTimer = 0;
@@ -667,7 +672,22 @@ export class HotTubGame {
         firstAttemptErrors: errorsThisRound,
         masteredFirstTry: errorsThisRound === 0
       });
-      this.onFirstAttemptComplete(wordStr, errorsThisRound);
+      const hintWatermarkUsed = Boolean(this.hintWatermarkUsed);
+      const motorSlip = isMotorSlip({
+        errors: errorsThisRound,
+        hintWatermarkUsed,
+        wrongTaps: this.wrongTapsOnWord,
+        word: wordStr
+      });
+      const attemptDetails = {
+        errors: errorsThisRound,
+        firstAttemptErrors: errorsThisRound,
+        isMotorSlip: motorSlip,
+        hintWatermarkUsed,
+        wrongTaps: [...(this.wrongTapsOnWord || [])],
+        word: wordStr
+      };
+      this.onFirstAttemptComplete(wordStr, errorsThisRound, attemptDetails);
     }
 
     // 2. Zero-Error Mastery check & In-Session Retry re-queueing

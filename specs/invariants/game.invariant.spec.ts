@@ -322,4 +322,43 @@ describe('Property-Based Invariant Suite (fast-check)', () => {
       { numRuns: 100 }
     );
   });
+
+  it('maintains Leitner Box SRS invariants under arbitrary combinations of spotless runs, motor slips, and spelling gaps', () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 5 }),
+        fc.integer({ min: 0, max: 20 }),
+        fc.array(
+          fc.record({
+            errors: fc.integer({ min: 0, max: 3 }),
+            isMotorSlip: fc.boolean(),
+            hintWatermarkUsed: fc.boolean()
+          }),
+          { minLength: 1, maxLength: 50 }
+        ),
+        (initialBox, initialStreak, attemptHistory) => {
+          let rec = {
+            word: 'câlin',
+            box: initialBox,
+            streak: initialStreak,
+            total_attempts: initialStreak,
+            correct_attempts: initialStreak,
+            next_review: '2026-11-01',
+            active: true
+          };
+
+          for (const attempt of attemptHistory) {
+            rec = computeFirstAttemptSRSUpdate(rec, attempt.errors, '2026-11-01', attempt);
+            expect(rec.box).toBeGreaterThanOrEqual(1);
+            expect(rec.box).toBeLessThanOrEqual(5);
+            expect(rec.streak).toBeGreaterThanOrEqual(0);
+            expect(rec.correct_attempts).toBeGreaterThanOrEqual(0);
+            expect(rec.correct_attempts).toBeLessThanOrEqual(rec.total_attempts);
+            expect(/^\d{4}-\d{2}-\d{2}$/.test(rec.next_review)).toBe(true);
+          }
+        }
+      ),
+      { numRuns: 60 }
+    );
+  });
 });

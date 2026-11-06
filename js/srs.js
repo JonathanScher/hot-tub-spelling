@@ -260,14 +260,14 @@ export function getProfileStatsSummary(profileId, customStorage, todayIso) {
 /**
  * @typedef {object} WordRecord
  * @property {string} word
- * @property {string} week_label
+ * @property {string} [week_label]
  * @property {boolean} active
  * @property {number} box
  * @property {string} next_review
  * @property {number} streak
  * @property {number} total_attempts
  * @property {number} correct_attempts
- * @property {string} custom_audio_url
+ * @property {string} [custom_audio_url]
  */
 
 /**
@@ -1006,31 +1006,188 @@ export function buildSessionWords(allWords, minWords = 8, maxWords = 10, options
 }
 
 /**
+ * Checks whether two characters are unaccented lookalikes (e.g. 'a' vs 'à' or 'é' vs 'è'),
+ * sharing the same base Latin character while not being identical.
+ * @param {string} charA
+ * @param {string} charB
+ * @returns {boolean}
+ */
+export function isUnaccentedLookalike(charA, charB) {
+  if (!charA || !charB) return false;
+  const a = String(charA).trim().toLowerCase();
+  const b = String(charB).trim().toLowerCase();
+  if (a === b) return false;
+  const baseA = a.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const baseB = b.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return Boolean(baseA && baseA === baseB);
+}
+
+/**
+ * Checks whether tappedChar is an adjacent letter in the target word
+ * (immediately preceding or following targetIndex) or adjacent in the alphabet.
+ * @param {string} tappedChar
+ * @param {string} [targetChar]
+ * @param {string} [word]
+ * @param {number} [targetIndex]
+ * @returns {boolean}
+ */
+export function isAdjacentLetter(tappedChar, targetChar, word, targetIndex) {
+  if (!tappedChar) return false;
+  const tapped = String(tappedChar).trim().toLowerCase();
+  const baseTapped = tapped.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  // 1. Check adjacency in the target word (previous or next letter in word)
+  if (word) {
+    const chars = Array.from(String(word).trim().toLowerCase());
+    const idx =
+      typeof targetIndex === 'number' && targetIndex >= 0
+        ? targetIndex
+        : (targetChar ? chars.findIndex((ch) => ch === targetChar || ch.normalize('NFD').replace(/[\u0300-\u036f]/g, '') === targetChar) : -1);
+
+    if (idx !== -1) {
+      const candidates = [];
+      if (idx > 0) candidates.push(chars[idx - 1]);
+      if (idx < chars.length - 1) candidates.push(chars[idx + 1]);
+
+      for (const cand of candidates) {
+        if (tapped === cand) return true;
+        const baseCand = cand.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        if (baseTapped === baseCand) return true;
+      }
+    }
+  }
+
+  // 2. Check adjacency in the alphabet (e.g. 'b' or 'd' for 'c')
+  if (targetChar) {
+    const target = String(targetChar).trim().toLowerCase();
+    const baseTarget = target.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (baseTapped && baseTarget && baseTapped !== baseTarget) {
+      if (Math.abs(baseTapped.charCodeAt(0) - baseTarget.charCodeAt(0)) === 1) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Determines whether a first-attempt error was a motor slip vs a spelling gap.
+ * A motor slip occurs ONLY when:
+ * 1) firstAttemptErrors is exactly 1,
+ * 2) hint watermark was NOT used,
+ * 3) the wrong tap was an unaccented lookalike or adjacent letter.
+ *
+ * @param {Record<string, any>} [details={}]
+ * @returns {boolean}
+ */
+export function isMotorSlip(details = {}) {
+  if (!details || typeof details !== 'object') return false;
+  if (details.isMotorSlip === true) return true;
+  if (details.isMotorSlip === false) return false;
+
+  const errors =
+    typeof details.errors === 'number'
+      ? details.errors
+      : typeof details.firstAttemptErrors === 'number'
+      ? details.firstAttemptErrors
+      : 0;
+
+  if (errors !== 1) return false;
+
+  const hintUsed = Boolean(details.hintWatermarkUsed || details.watermarkUsed || details.hintUsed);
+  if (hintUsed) return false;
+
+  let wrongTap = details.wrongTap || details.tappedChar || '';
+  let targetChar = details.targetChar || '';
+  let targetIndex = typeof details.targetIndex === 'number' ? details.targetIndex : -1;
+  const word = details.word || '';
+
+  if (Array.isArray(details.wrongTaps) && details.wrongTaps.length > 0) {
+    const firstWrong = details.wrongTaps[0];
+    if (firstWrong) {
+      wrongTap = firstWrong.tappedChar || firstWrong.wrongTap || wrongTap;
+      targetChar = firstWrong.targetChar || targetChar;
+      if (typeof firstWrong.targetIndex === 'number') {
+        targetIndex = firstWrong.targetIndex;
+      }
+    }
+  }
+
+  if (!wrongTap) return false;
+
+  if (targetChar && isUnaccentedLookalike(wrongTap, targetChar)) {
+    return true;
+  }
+
+  if (isAdjacentLetter(wrongTap, targetChar, word, targetIndex)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Pure computation of a single word record's SRS update after its first attempt in a session.
+ *
+ * Softened Leitner Reset Rules:
+ * - firstAttemptErrors === 0:
+ *     box = min(5, box + 1), next_review = today + BOX_INTERVALS[box], streak = streak + 1, correct_attempts += 1
+ * - firstAttemptErrors === 1 AND motor slip (unaccented lookalike or adjacent letter, without hint watermark):
+ *     box = max(1, box - 1), next_review = today + BOX_INTERVALS[box], streak = max(0, min(streak - 1, box - 1))
+ * - firstAttemptErrors >= 2 OR hint watermark used OR non-slip error (spelling gap):
+ *     box = 1, next_review = today + 1 day, streak = 0
+ *
  * @param {WordRecord} current
- * @param {number} firstAttemptErrors
+ * @param {number | Record<string, any>} firstAttemptErrors
  * @param {string} [todayIso]
+ * @param {Record<string, any>} [options={}]
  * @returns {WordRecord}
  */
-export function computeFirstAttemptSRSUpdate(current, firstAttemptErrors, todayIso) {
+export function computeFirstAttemptSRSUpdate(current, firstAttemptErrors, todayIso, options = {}) {
   const today = todayIso || getLocalISODate();
   const totalAttempts = (current.total_attempts || 0) + 1;
+
+  let errors = 0;
+  let opts = options || {};
+
+  if (typeof firstAttemptErrors === 'number') {
+    errors = firstAttemptErrors;
+  } else if (firstAttemptErrors && typeof firstAttemptErrors === 'object') {
+    errors =
+      typeof firstAttemptErrors.firstAttemptErrors === 'number'
+        ? firstAttemptErrors.firstAttemptErrors
+        : typeof firstAttemptErrors.errors === 'number'
+        ? firstAttemptErrors.errors
+        : 0;
+    opts = { ...firstAttemptErrors, ...opts };
+  }
+
+  if (!opts.word && current.word) opts.word = current.word;
 
   let nextBox;
   let nextReview;
   let streak;
   let correctAttempts = current.correct_attempts || 0;
 
-  if (firstAttemptErrors === 0) {
+  if (errors === 0) {
     nextBox = Math.min(5, (current.box || 1) + 1);
     const intervalDays = BOX_INTERVALS[nextBox] || 1;
     nextReview = addDaysISO(today, intervalDays);
     streak = (current.streak || 0) + 1;
     correctAttempts += 1;
   } else {
-    nextBox = 1;
-    nextReview = addDaysISO(today, 1); // Tomorrow (+1 day)
-    streak = 0;
+    const motorSlip = isMotorSlip({ ...opts, errors });
+    if (motorSlip) {
+      nextBox = Math.max(1, (current.box || 1) - 1);
+      const intervalDays = BOX_INTERVALS[nextBox] || 1;
+      nextReview = addDaysISO(today, intervalDays);
+      streak = Math.max(0, Math.min((current.streak || 0) > 0 ? current.streak - 1 : 0, nextBox - 1));
+    } else {
+      nextBox = 1;
+      nextReview = addDaysISO(today, 1); // Tomorrow (+1 day)
+      streak = 0;
+    }
   }
 
   return {
@@ -1046,8 +1203,8 @@ export function computeFirstAttemptSRSUpdate(current, firstAttemptErrors, todayI
 /**
  * Updates long-term Leitner Box stats based ONLY on the FIRST attempt of the word in a session.
  * @param {string} targetWord
- * @param {number} firstAttemptErrors
- * @param {{ today?: string, storage?: StorageLike, profileId?: string }} [options]
+ * @param {number | object} firstAttemptErrors
+ * @param {{ today?: string, storage?: StorageLike, profileId?: string, [key: string]: any }} [options]
  * @returns {WordRecord | null} The updated word record
  */
 export function recordFirstAttemptSRS(targetWord, firstAttemptErrors, options = {}) {
@@ -1061,7 +1218,12 @@ export function recordFirstAttemptSRS(targetWord, firstAttemptErrors, options = 
   const idx = words.findIndex((w) => w.word === clean);
   if (idx === -1) return null;
 
-  const updated = computeFirstAttemptSRSUpdate(words[idx], firstAttemptErrors, today);
+  const mergedOpts = {
+    word: clean,
+    ...options
+  };
+
+  const updated = computeFirstAttemptSRSUpdate(words[idx], firstAttemptErrors, today, mergedOpts);
   words[idx] = updated;
   saveWords(words, store, profileId);
   return updated;

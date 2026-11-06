@@ -5,6 +5,7 @@ import {
   createGameState,
   stepGame,
   handleBubbleTapOnState,
+  recordWordCompletionOnState,
   spawnBubbleOnState
 } from '../../js/game-core.js';
 
@@ -214,6 +215,66 @@ describe('Sequential Spelling, Hint Scaffolding & Session Mastery (js/game-core.
       expect(stopped.bubbles).toHaveLength(0);
       expect(afterStoppedHint.watermarkActive).toBe(false);
       expect(tapResOnStopped.handled).toBe(false);
+    });
+
+    it('detects a motor slip when a player taps an unaccented lookalike (e.g. "a" instead of "â" on "câlin") and flags isMotorSlip on completion', () => {
+      let state = createGameState({
+        sessionWords: [{ word: 'câlin', week_label: 'Week 8', box: 5 }],
+        seed: 42
+      });
+
+      // Tap 'c' correctly
+      const cBubble = state.bubbles.find((b) => b.char === 'c')!;
+      state = stepGame(state, { type: 'TAP_BUBBLE', bubbleId: cBubble.id });
+      expect(state.currentIndex).toBe(1);
+
+      // Spawn and tap unaccented 'a' (lookalike for 'â')
+      const plainABubble = spawnBubbleOnState(state)!;
+      plainABubble.char = 'a';
+      state = stepGame(state, { type: 'TAP_BUBBLE', bubbleId: plainABubble.id });
+      expect(state.wordErrorCount).toBe(1);
+
+      // Spell rest of word correctly: 'â', 'l', 'i', 'n'
+      for (const char of ['â', 'l', 'i', 'n']) {
+        let b = state.bubbles.find((bubble) => bubble.state === 'floating' && bubble.char === char);
+        if (!b) {
+          b = spawnBubbleOnState(state)!;
+          b.char = char;
+        }
+        state = stepGame(state, { type: 'TAP_BUBBLE', bubbleId: b.id });
+      }
+
+      const res = recordWordCompletionOnState(state);
+      expect(res.completed).toBe(true);
+      expect(res.errorsThisRound).toBe(1);
+      expect(res.isMotorSlip).toBe(true);
+    });
+
+    it('identifies hint watermark usage as NOT a motor slip (hintWatermarkUsed: true, isMotorSlip: false)', () => {
+      let state = createGameState({
+        sessionWords: [{ word: 'câlin', week_label: 'Week 8', box: 5 }],
+        seed: 42
+      });
+
+      // Player uses hint button
+      state = stepGame(state, { type: 'USE_HINT' });
+      expect(state.wordErrorCount).toBe(1);
+
+      // Spell rest of word correctly
+      for (const char of ['c', 'â', 'l', 'i', 'n']) {
+        let b = state.bubbles.find((bubble) => bubble.state === 'floating' && bubble.char === char);
+        if (!b) {
+          b = spawnBubbleOnState(state)!;
+          b.char = char;
+        }
+        state = stepGame(state, { type: 'TAP_BUBBLE', bubbleId: b.id });
+      }
+
+      const res = recordWordCompletionOnState(state);
+      expect(res.completed).toBe(true);
+      expect(res.errorsThisRound).toBe(1);
+      expect(res.isMotorSlip).toBe(false);
+      expect(res.hintWatermarkUsed).toBe(true);
     });
   });
 });

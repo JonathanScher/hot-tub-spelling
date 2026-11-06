@@ -142,8 +142,8 @@ function initApp() {
     progressLabel: document.getElementById('progress-label'),
     retryBadge: document.getElementById('retry-badge'),
 
-    onFirstAttemptComplete: (wordStr, firstAttemptErrors) => {
-      const updatedRecord = recordFirstAttemptSRS(wordStr, firstAttemptErrors);
+    onFirstAttemptComplete: (wordStr, firstAttemptErrors, attemptDetails = {}) => {
+      const updatedRecord = recordFirstAttemptSRS(wordStr, firstAttemptErrors, attemptDetails);
       if (updatedRecord) {
         syncManager.queueWordUpdate(updatedRecord).catch(() => {});
       }

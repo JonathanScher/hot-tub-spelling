@@ -6,7 +6,14 @@
  */
 
 import { createPRNG } from './prng.js';
-import { getPlausibleDistractors } from './srs.js';
+import {
+  getPlausibleDistractors,
+  isMotorSlip,
+  isUnaccentedLookalike,
+  isAdjacentLetter
+} from './srs.js';
+
+export { isMotorSlip, isUnaccentedLookalike, isAdjacentLetter };
 
 export const MIN_BUBBLES = 5;
 export const MAX_BUBBLES = 7;
@@ -89,6 +96,8 @@ export const CHEER_MESSAGES_PRACTICE = [
  * @property {number} wordErrorCount
  * @property {number} letterErrorCount
  * @property {boolean} watermarkActive
+ * @property {boolean} [hintWatermarkUsed]
+ * @property {Array<{ tappedChar: string, targetChar: string, targetIndex: number }>} [wrongTapsOnWord]
  * @property {boolean} wordTransitioning
  * @property {boolean} running
  * @property {boolean} paused
@@ -171,6 +180,8 @@ export function cloneGameState(state) {
     wordErrorCount: state.wordErrorCount,
     letterErrorCount: state.letterErrorCount,
     watermarkActive: state.watermarkActive,
+    hintWatermarkUsed: Boolean(state.hintWatermarkUsed),
+    wrongTapsOnWord: Array.isArray(state.wrongTapsOnWord) ? state.wrongTapsOnWord.map((t) => ({ ...t })) : [],
     wordTransitioning: state.wordTransitioning,
     running: state.running,
     paused: state.paused,
@@ -237,6 +248,8 @@ export function createGameState(config = {}) {
     wordErrorCount: 0,
     letterErrorCount: 0,
     watermarkActive: false,
+    hintWatermarkUsed: false,
+    wrongTapsOnWord: [],
     wordTransitioning: false,
     running: false,
     paused: false,
@@ -510,6 +523,8 @@ export function startNextWordOnState(state) {
   state.wordErrorCount = 0;
   state.letterErrorCount = 0;
   state.watermarkActive = false;
+  state.hintWatermarkUsed = false;
+  state.wrongTapsOnWord = [];
   state.wordTransitioning = false;
   state.spawnCounter = 0;
   state.spawnTimer = 0;
@@ -551,6 +566,7 @@ export function useHintOnState(state) {
   if (!state.watermarkActive) {
     state.wordErrorCount += 1;
     state.watermarkActive = true;
+    state.hintWatermarkUsed = true;
     return { activated: true, pulsed: false };
   } else {
     return { activated: false, pulsed: true };
@@ -627,11 +643,18 @@ export function handleBubbleTapOnState(state, bubbleOrId) {
     bubble.state = 'fizzling';
     state.wordErrorCount += 1;
     state.letterErrorCount += 1;
+    if (!state.wrongTapsOnWord) state.wrongTapsOnWord = [];
+    state.wrongTapsOnWord.push({
+      tappedChar,
+      targetChar,
+      targetIndex: state.currentIndex
+    });
 
     let autoWatermarkTriggered = false;
     if (state.letterErrorCount >= 2 && !state.watermarkActive) {
       state.watermarkActive = true;
       autoWatermarkTriggered = true;
+      state.hintWatermarkUsed = true;
     }
 
     return {
@@ -657,7 +680,9 @@ export function handleBubbleTapOnState(state, bubbleOrId) {
  *   errorsThisRound?: number,
  *   isFirstAttempt?: boolean,
  *   cheerMessage?: string,
- *   fadedBubbles?: BubbleEntity[]
+ *   fadedBubbles?: BubbleEntity[],
+ *   isMotorSlip?: boolean,
+ *   hintWatermarkUsed?: boolean
  * }}
  */
 export function recordWordCompletionOnState(state, options = {}) {
@@ -668,6 +693,13 @@ export function recordWordCompletionOnState(state, options = {}) {
   const wordStr = state.currentWordObj.word;
   const errorsThisRound = state.wordErrorCount;
   const isFirstAttempt = !state.firstAttemptRecorded.has(wordStr);
+  const hintWatermarkUsed = Boolean(state.hintWatermarkUsed);
+  const isMotorSlipResult = isMotorSlip({
+    errors: errorsThisRound,
+    hintWatermarkUsed,
+    wrongTaps: state.wrongTapsOnWord,
+    word: wordStr
+  });
 
   /** @type {BubbleEntity[]} */
   const fadedBubbles = [];
@@ -710,7 +742,9 @@ export function recordWordCompletionOnState(state, options = {}) {
     errorsThisRound,
     isFirstAttempt,
     cheerMessage,
-    fadedBubbles
+    fadedBubbles,
+    isMotorSlip: isMotorSlipResult,
+    hintWatermarkUsed
   };
 }
 
