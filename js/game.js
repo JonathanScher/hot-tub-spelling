@@ -483,10 +483,86 @@ export class HotTubGame {
 
     bubbleObj.el = el;
 
+    let startX = 0;
+    let startY = 0;
+    let isSwiping = false;
+    let pointerActive = false;
+    let activePointerId = null;
+
+    el.title = 'Click to spell • Drag/Flick or Right-click to discard distractor';
+
     el.addEventListener('pointerdown', (ev) => {
       ev.preventDefault();
       ev.stopPropagation();
-      this._handleBubbleTap(bubbleObj);
+
+      // Right-click or Shift+Click: instant desktop flick shortcut
+      if (ev.button === 2 || ev.shiftKey) {
+        this._handleBubbleFlick(bubbleObj, { dx: 140, dy: -60 });
+        return;
+      }
+
+      pointerActive = true;
+      activePointerId = ev.pointerId;
+      startX = ev.clientX;
+      startY = ev.clientY;
+      isSwiping = false;
+      try {
+        el.setPointerCapture(ev.pointerId);
+      } catch (_) {}
+    });
+
+    el.addEventListener('pointermove', (ev) => {
+      if (!pointerActive || ev.pointerId !== activePointerId) return;
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+      const dist = Math.hypot(dx, dy);
+
+      // Drag threshold of 14px triggers flick/swipe gesture on desktop mouse or touch
+      if (dist >= 14 && !isSwiping) {
+        isSwiping = true;
+        pointerActive = false;
+        try {
+          el.releasePointerCapture(ev.pointerId);
+        } catch (_) {}
+        this._handleBubbleFlick(bubbleObj, { dx, dy });
+      }
+    });
+
+    el.addEventListener('pointerup', (ev) => {
+      if (pointerActive && ev.pointerId === activePointerId) {
+        pointerActive = false;
+        try {
+          el.releasePointerCapture(ev.pointerId);
+        } catch (_) {}
+        if (!isSwiping) {
+          this._handleBubbleTap(bubbleObj);
+        }
+      }
+    });
+
+    el.addEventListener('pointercancel', () => {
+      pointerActive = false;
+      isSwiping = false;
+    });
+
+    // Desktop Right-Click: instant distractor flick
+    el.addEventListener('contextmenu', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      this._handleBubbleFlick(bubbleObj, { dx: 140, dy: -60 });
+    });
+
+    // Desktop Double-Click: instant distractor flick
+    el.addEventListener('dblclick', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      this._handleBubbleFlick(bubbleObj, { dx: 140, dy: -60 });
+    });
+
+    el.addEventListener('flick', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      this._handleBubbleFlick(bubbleObj, (/** @type {any} */ (ev)).detail || null);
     });
 
     this._positionBubbleElement(bubbleObj);
