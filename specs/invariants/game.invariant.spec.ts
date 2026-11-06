@@ -93,6 +93,26 @@ function assertStateInvariants(state: GameState): void {
   if (state.currentIndex === state.targetChars.length && state.targetChars.length > 0 && state.running) {
     expect(state.wordTransitioning).toBe(true);
   }
+
+  // 4. Retry Capping Invariant: No word can exceed 2 in-session retries
+  if (state.currentWordObj && (state.currentWordObj as any).retryCount !== undefined) {
+    expect((state.currentWordObj as any).retryCount).toBeLessThanOrEqual(2);
+  }
+  for (const item of state.queue) {
+    if ((item as any).retryCount !== undefined) {
+      expect((item as any).retryCount).toBeLessThanOrEqual(2);
+    }
+  }
+  if ((state as any).prefilledIndices !== undefined) {
+    expect(Array.isArray((state as any).prefilledIndices)).toBe(true);
+    for (const idx of (state as any).prefilledIndices) {
+      expect(idx).toBeGreaterThanOrEqual(0);
+      expect(idx).toBeLessThan(state.targetChars.length);
+    }
+    if (state.currentIndex < state.targetChars.length) {
+      expect((state as any).prefilledIndices.includes(state.currentIndex)).toBe(false);
+    }
+  }
 }
 
 /**

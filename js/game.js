@@ -32,7 +32,8 @@ import {
   spawnBubbleOnState,
   useHintOnState,
   handleBubbleTapOnState,
-  clampDeltaTime
+  clampDeltaTime,
+  getNextUnfilledIndex
 } from './game-core.js';
 
 export {
@@ -43,7 +44,8 @@ export {
   CHEER_MESSAGES_PRACTICE,
   createGameState,
   stepGame,
-  createPRNG
+  createPRNG,
+  getNextUnfilledIndex
 };
 
 export class HotTubGame {
@@ -108,6 +110,8 @@ export class HotTubGame {
     this.currentIndex = 0;
     this.wordErrorCount = 0;
     this.letterErrorCount = 0;
+    this.prefilledIndices = [];
+    this.letterErrorsThisRound = new Set();
     this.watermarkActive = false;
     this.wordTransitioning = false;
     this.running = false;
@@ -184,7 +188,9 @@ export class HotTubGame {
     this.stop();
 
     this.allVocabWords = Array.isArray(allVocabularyWords) ? allVocabularyWords : sessionWords;
-    this.queue = sessionWords.map((w) => ({ ...w, isRetry: false }));
+    this.queue = sessionWords.map((w) => ({ ...w, isRetry: false, retryCount: 0 }));
+    this.prefilledIndices = [];
+    this.letterErrorsThisRound = new Set();
     this.totalUniqueWords = this.queue.length;
     this.masteredCount = 0;
     this.firstAttemptRecorded.clear();
@@ -276,13 +282,26 @@ export class HotTubGame {
     this.currentWordObj = nextItem;
     // Use Array.from to split cleanly by Unicode code point while keeping lowercase accents intact
     this.targetChars = Array.from(String(this.currentWordObj.word || '').trim().toLowerCase());
-    this.currentIndex = 0;
     this.wordErrorCount = 0;
     this.letterErrorCount = 0;
     this.watermarkActive = false;
     this.wordTransitioning = false;
     this.spawnCounter = 0;
     this.spawnTimer = 0;
+    this.letterErrorsThisRound = new Set();
+
+    const retryCount = nextItem.retryCount || 0;
+    if (retryCount === 2 && Array.isArray(nextItem.firstTryCorrectIndices)) {
+      let prefilled = nextItem.firstTryCorrectIndices.filter((idx) => idx < this.targetChars.length);
+      if (prefilled.length >= this.targetChars.length && this.targetChars.length > 0) {
+        prefilled = prefilled.slice(0, this.targetChars.length - 1);
+      }
+      this.prefilledIndices = prefilled;
+    } else {
+      this.prefilledIndices = [];
+    }
+
+    this.currentIndex = getNextUnfilledIndex(this.targetChars, this.prefilledIndices, 0);
 
     if (this.hintButton) {
       this.hintButton.classList.remove('is-active');
@@ -317,7 +336,7 @@ export class HotTubGame {
     this.targetChars.forEach((ch, idx) => {
       const slot = document.createElement('div');
       slot.className = 'letter-slot';
-      if (idx === 0) slot.classList.add('is-current');
+      if (idx === this.currentIndex) slot.classList.add('is-current');
       slot.dataset.index = String(idx);
       slot.dataset.targetChar = ch;
 
@@ -328,7 +347,14 @@ export class HotTubGame {
 
       const filledSpan = document.createElement('span');
       filledSpan.className = 'slot-letter';
-      filledSpan.textContent = '';
+
+      const isPrefilled = this.prefilledIndices && this.prefilledIndices.includes(idx);
+      if (isPrefilled) {
+        slot.classList.add('is-filled', 'is-prefilled');
+        filledSpan.textContent = ch;
+      } else {
+        filledSpan.textContent = '';
+      }
 
       const underline = document.createElement('span');
       underline.className = 'slot-underline';
@@ -345,8 +371,10 @@ export class HotTubGame {
   _updateSlotStates() {
     if (!this.slotsContainer) return;
     const slots = this.slotsContainer.querySelectorAll('.letter-slot');
+    const prefilledSet = new Set(this.prefilledIndices || []);
     slots.forEach((slot, idx) => {
-      const isFilled = idx < this.currentIndex;
+      const isPrefilled = prefilledSet.has(idx);
+      const isFilled = idx < this.currentIndex || isPrefilled;
       const isCurrent = idx === this.currentIndex && !this.wordTransitioning;
       slot.classList.toggle('is-filled', isFilled);
       slot.classList.toggle('is-current', isCurrent);
@@ -519,6 +547,9 @@ export class HotTubGame {
    * @param {import('./game-core.js').BubbleEntity} bubble
    */
   _onWrongBubbleTap(bubble) {
+    if (this.letterErrorsThisRound) {
+      this.letterErrorsThisRound.add(this.currentIndex);
+    }
     const res = handleBubbleTapOnState(this, bubble);
     if (!res.handled || res.correct) return;
 
@@ -660,6 +691,7 @@ export class HotTubGame {
     }
 
     // 1. Long-term Leitner SRS progression is determined strictly by the FIRST attempt in the session
+    let firstTryCorrectIndices = this.currentWordObj.firstTryCorrectIndices;
     if (isFirstAttempt) {
       this.firstAttemptRecorded.add(wordStr);
       this.sessionResults.push({
@@ -667,18 +699,24 @@ export class HotTubGame {
         firstAttemptErrors: errorsThisRound,
         masteredFirstTry: errorsThisRound === 0
       });
+      firstTryCorrectIndices = this.targetChars
+        .map((_, idx) => idx)
+        .filter((idx) => !this.letterErrorsThisRound?.has(idx));
+      this.currentWordObj.firstTryCorrectIndices = firstTryCorrectIndices;
       this.onFirstAttemptComplete(wordStr, errorsThisRound);
     }
 
-    // 2. Zero-Error Mastery check & In-Session Retry re-queueing
+    // 2. Zero-Error Mastery check & In-Session Retry re-queueing (capped at 2 retries per session)
+    const currentRetryCount = this.currentWordObj.retryCount || 0;
     const willBeMastered = errorsThisRound === 0;
     if (willBeMastered) {
       this.masteredCount += 1;
-    } else {
-      // Re-queue word at the end of the current session until spelled with zero errors
+    } else if (currentRetryCount < 2) {
       this.queue.push({
         ...this.currentWordObj,
-        isRetry: true
+        isRetry: true,
+        retryCount: currentRetryCount + 1,
+        firstTryCorrectIndices: firstTryCorrectIndices ? [...firstTryCorrectIndices] : []
       });
     }
 

@@ -182,6 +182,231 @@ describe('Sequential Spelling, Hint Scaffolding & Session Mastery (js/game-core.
       });
     });
 
+    it('caps in-session retries at 2 per word and does not re-queue after second retry', () => {
+      // GIVEN a 1-word session with 'chat'
+      let state = createGameState({
+        sessionWords: [{ word: 'chat' }],
+        seed: 123
+      });
+      expect(state.currentWordObj?.word).toBe('chat');
+      expect(state.currentWordObj?.isRetry).toBe(false);
+      expect(state.currentWordObj?.retryCount ?? 0).toBe(0);
+
+      // ATTEMPT 1: Player makes an error on 'chat', finishes word, completes it
+      state = stepGame(state, { type: 'USE_HINT' });
+      state = spellCurrentWordSpotlessly(state);
+      expect(state.wordTransitioning).toBe(true);
+      state = stepGame(state, { type: 'COMPLETE_WORD' });
+
+      // THEN 'chat' is re-queued for Retry #1 (retryCount = 1)
+      expect(state.running).toBe(true);
+      expect(state.queue).toHaveLength(1);
+      expect(state.queue[0].word).toBe('chat');
+      expect(state.queue[0].isRetry).toBe(true);
+      expect(state.queue[0].retryCount).toBe(1);
+
+      // Advance to Retry #1
+      state = stepGame(state, { type: 'TICK', dt: 0.05 });
+      expect(state.currentWordObj?.word).toBe('chat');
+      expect(state.currentWordObj?.retryCount).toBe(1);
+
+      // RETRY 1: Player makes another error on 'chat', finishes word, completes it
+      state = stepGame(state, { type: 'USE_HINT' });
+      state = spellCurrentWordSpotlessly(state);
+      state = stepGame(state, { type: 'COMPLETE_WORD' });
+
+      // THEN 'chat' is re-queued for Retry #2 (retryCount = 2)
+      expect(state.running).toBe(true);
+      expect(state.queue).toHaveLength(1);
+      expect(state.queue[0].word).toBe('chat');
+      expect(state.queue[0].isRetry).toBe(true);
+      expect(state.queue[0].retryCount).toBe(2);
+
+      // Advance to Retry #2
+      state = stepGame(state, { type: 'TICK', dt: 0.05 });
+      expect(state.currentWordObj?.word).toBe('chat');
+      expect(state.currentWordObj?.retryCount).toBe(2);
+
+      // RETRY 2: Player makes an error again on 'chat', finishes word, completes it
+      state = stepGame(state, { type: 'USE_HINT' });
+      state = spellCurrentWordSpotlessly(state);
+      state = stepGame(state, { type: 'COMPLETE_WORD' });
+
+      // THEN retries are capped at 2: 'chat' is NOT re-queued again, queue is empty, and session ends
+      expect(state.queue).toHaveLength(0);
+      expect(state.running).toBe(false);
+      expect(state.sessionSummary).not.toBeNull();
+      expect(state.sessionSummary?.totalWords).toBe(1);
+    });
+
+    it('pre-fills letters player got right on first try on second retry (silent ending scenario)', () => {
+      // GIVEN a session with word 'grand' (['g', 'r', 'a', 'n', 'd'])
+      let state = createGameState({
+        sessionWords: [{ word: 'grand' }],
+        seed: 777
+      });
+
+      // ATTEMPT 1: Pop 'g', 'r', 'a', 'n' cleanly with zero errors
+      for (const ch of ['g', 'r', 'a', 'n']) {
+        let match = state.bubbles.find((b) => b.state === 'floating' && b.char === ch);
+        if (!match) {
+          match = spawnBubbleOnState(state)!;
+          match.char = ch;
+        }
+        state = stepGame(state, { type: 'TAP_BUBBLE', bubbleId: match.id });
+      }
+      expect(state.currentIndex).toBe(4);
+      expect(state.wordErrorCount).toBe(0);
+
+      // At 'd' (silent ending), player taps a wrong bubble 'z' first, then taps 'd'
+      const wrongBubble = spawnBubbleOnState(state)!;
+      wrongBubble.char = 'z';
+      state = stepGame(state, { type: 'TAP_BUBBLE', bubbleId: wrongBubble.id });
+      expect(state.wordErrorCount).toBe(1);
+
+      let dBubble = state.bubbles.find((b) => b.state === 'floating' && b.char === 'd');
+      if (!dBubble) {
+        dBubble = spawnBubbleOnState(state)!;
+        dBubble.char = 'd';
+      }
+      state = stepGame(state, { type: 'TAP_BUBBLE', bubbleId: dBubble.id });
+      expect(state.wordTransitioning).toBe(true);
+      state = stepGame(state, { type: 'COMPLETE_WORD' });
+
+      // RETRY 1: Not pre-filled yet on retry 1
+      expect(state.currentWordObj?.retryCount).toBe(1);
+      expect(state.prefilledIndices).toEqual([]);
+      expect(state.currentIndex).toBe(0);
+
+      // Player makes an error on retry 1 and completes word
+      state = stepGame(state, { type: 'USE_HINT' });
+      state = spellCurrentWordSpotlessly(state);
+      state = stepGame(state, { type: 'COMPLETE_WORD' });
+
+      // RETRY 2: Letters got right on first try ('g', 'r', 'a', 'n' at indices 0, 1, 2, 3) ARE pre-filled!
+      expect(state.currentWordObj?.retryCount).toBe(2);
+      expect(state.prefilledIndices).toEqual([0, 1, 2, 3]);
+      // Current index starts directly at the silent ending 'd' (index 4)
+      expect(state.currentIndex).toBe(4);
+      expect(state.targetChars[state.currentIndex]).toBe('d');
+
+      // Player pops the silent ending 'd'
+      dBubble = state.bubbles.find((b) => b.state === 'floating' && b.char === 'd');
+      if (!dBubble) {
+        dBubble = spawnBubbleOnState(state)!;
+        dBubble.char = 'd';
+      }
+      state = stepGame(state, { type: 'TAP_BUBBLE', bubbleId: dBubble.id });
+
+      // Word transitions to complete immediately!
+      expect(state.currentIndex).toBe(5);
+      expect(state.wordTransitioning).toBe(true);
+    });
+
+    it('pre-fills letters player got right on first try on second retry (tricky middle scenario)', () => {
+      // GIVEN a session with word 'porte' (['p', 'o', 'r', 't', 'e'])
+      let state = createGameState({
+        sessionWords: [{ word: 'porte' }],
+        seed: 888
+      });
+
+      // ATTEMPT 1: Pop 'p' and 'o' cleanly
+      for (const ch of ['p', 'o']) {
+        let match = state.bubbles.find((b) => b.state === 'floating' && b.char === ch);
+        if (!match) {
+          match = spawnBubbleOnState(state)!;
+          match.char = ch;
+        }
+        state = stepGame(state, { type: 'TAP_BUBBLE', bubbleId: match.id });
+      }
+      expect(state.currentIndex).toBe(2); // 'r'
+
+      // Player taps wrong bubble on tricky middle 'r'
+      const wrongBubble = spawnBubbleOnState(state)!;
+      wrongBubble.char = 'x';
+      state = stepGame(state, { type: 'TAP_BUBBLE', bubbleId: wrongBubble.id });
+      expect(state.wordErrorCount).toBe(1);
+
+      // Now finish 'r', 't', 'e' cleanly
+      for (const ch of ['r', 't', 'e']) {
+        let match = state.bubbles.find((b) => b.state === 'floating' && b.char === ch);
+        if (!match) {
+          match = spawnBubbleOnState(state)!;
+          match.char = ch;
+        }
+        state = stepGame(state, { type: 'TAP_BUBBLE', bubbleId: match.id });
+      }
+      expect(state.wordTransitioning).toBe(true);
+      state = stepGame(state, { type: 'COMPLETE_WORD' });
+
+      // RETRY 1: Make error and complete
+      state = stepGame(state, { type: 'USE_HINT' });
+      state = spellCurrentWordSpotlessly(state);
+      state = stepGame(state, { type: 'COMPLETE_WORD' });
+
+      // RETRY 2: Indices 0, 1, 3, 4 ('p', 'o', 't', 'e') are prefilled! Only tricky middle 'r' (index 2) remains
+      expect(state.currentWordObj?.retryCount).toBe(2);
+      expect(state.prefilledIndices).toEqual([0, 1, 3, 4]);
+      expect(state.currentIndex).toBe(2);
+      expect(state.targetChars[state.currentIndex]).toBe('r');
+
+      // Player pops 'r'
+      let rBubble = state.bubbles.find((b) => b.state === 'floating' && b.char === 'r');
+      if (!rBubble) {
+        rBubble = spawnBubbleOnState(state)!;
+        rBubble.char = 'r';
+      }
+      state = stepGame(state, { type: 'TAP_BUBBLE', bubbleId: rBubble.id });
+
+      // Skips prefilled 3 and 4, advances to 5, completing word
+      expect(state.currentIndex).toBe(5);
+      expect(state.wordTransitioning).toBe(true);
+    });
+
+    it('marks letters as error when USE_HINT was activated on that letter during first try', () => {
+      // GIVEN a session with 'bleu'
+      let state = createGameState({
+        sessionWords: [{ word: 'bleu' }],
+        seed: 999
+      });
+
+      // ATTEMPT 1: Player uses USE_HINT at index 0 ('b')
+      state = stepGame(state, { type: 'USE_HINT' });
+      // Finish 'b', 'l', 'e', 'u' cleanly
+      for (const ch of ['b', 'l', 'e', 'u']) {
+        let match = state.bubbles.find((b) => b.state === 'floating' && b.char === ch);
+        if (!match) {
+          match = spawnBubbleOnState(state)!;
+          match.char = ch;
+        }
+        state = stepGame(state, { type: 'TAP_BUBBLE', bubbleId: match.id });
+      }
+      state = stepGame(state, { type: 'COMPLETE_WORD' });
+
+      // RETRY 1: Error & complete
+      state = stepGame(state, { type: 'USE_HINT' });
+      state = spellCurrentWordSpotlessly(state);
+      state = stepGame(state, { type: 'COMPLETE_WORD' });
+
+      // RETRY 2: Index 0 had error (from hint), so only 1, 2, 3 ('l', 'e', 'u') are prefilled
+      expect(state.currentWordObj?.retryCount).toBe(2);
+      expect(state.prefilledIndices).toEqual([1, 2, 3]);
+      expect(state.currentIndex).toBe(0);
+      expect(state.targetChars[state.currentIndex]).toBe('b');
+
+      // Pop 'b'
+      let bBubble = state.bubbles.find((b) => b.state === 'floating' && b.char === 'b');
+      if (!bBubble) {
+        bBubble = spawnBubbleOnState(state)!;
+        bBubble.char = 'b';
+      }
+      state = stepGame(state, { type: 'TAP_BUBBLE', bubbleId: bBubble.id });
+
+      // Skips 1, 2, 3, advances to 4, word completed!
+      expect(state.currentIndex).toBe(4);
+      expect(state.wordTransitioning).toBe(true);
+    });
+
     it('ignores taps, hints, and ticks when paused, stopped, or wordTransitioning', () => {
       // GIVEN an active game state
       const state = createGameState({
