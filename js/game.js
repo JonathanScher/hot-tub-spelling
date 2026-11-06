@@ -635,21 +635,73 @@ export class HotTubGame {
     }
 
     const res = handleBubbleFlickOnState(this, bubble);
-    if (!res.handled || !res.isDistractor) {
-      // Accidental flick on target letter: shield visual cue
-      if (bubble.el) {
-        bubble.el.classList.remove('is-shielded');
-        void bubble.el.offsetWidth;
-        bubble.el.classList.add('is-shielded');
-        setTimeout(() => {
-          if (bubble.el) bubble.el.classList.remove('is-shielded');
-        }, 400);
-      }
+    if (!res.handled) {
+      return res;
+    }
+
+    if (!res.isDistractor) {
+      this._onTargetFlickedAway(bubble, gesture, res);
       return res;
     }
 
     this._onDistractorFlicked(bubble, gesture, res);
     return res;
+  }
+
+  /**
+   * Visual & audio feedback when the player accidentally flicks away the required target letter.
+   * The bubble flies away with a warm coral/amber tint, resets combo to 0, and triggers a gentle "Oops!" message.
+   * @param {import('./game-core.js').BubbleEntity} bubble
+   * @param {{ dx?: number, dy?: number } | null} gesture
+   * @param {any} res
+   */
+  _onTargetFlickedAway(bubble, gesture, res) {
+    if (typeof soundEngine.playTargetFlickOops === 'function') {
+      soundEngine.playTargetFlickOops();
+    } else {
+      soundEngine.playWrongFizzle();
+    }
+
+    if (bubble.el) {
+      bubble.el.classList.add('is-flicked-away', 'is-flicked-target-oops');
+      if (gesture && (gesture.dx || gesture.dy)) {
+        const angle = Math.atan2(gesture.dy, gesture.dx);
+        const dist = 180;
+        const tx = Math.cos(angle) * dist;
+        const ty = Math.sin(angle) * dist;
+        bubble.el.style.transform = `translate(${bubble.x - bubble.radius + tx}px, ${bubble.y - bubble.radius + ty}px) scale(0.25) rotate(${angle * 57.3}deg)`;
+        bubble.el.style.opacity = '0';
+      }
+    }
+    setTimeout(() => this._removeBubble(bubble), 280);
+
+    if (this.mascotWrap) {
+      this.mascotWrap.classList.remove('is-happy-nod');
+      void this.mascotWrap.offsetWidth;
+      this.mascotWrap.classList.add('is-oops-shake');
+      setTimeout(() => {
+        if (this.mascotWrap) this.mascotWrap.classList.remove('is-oops-shake');
+      }, 450);
+    }
+
+    if (this.comboBarEl) {
+      this.comboBarEl.classList.remove('is-broken');
+      void this.comboBarEl.offsetWidth;
+      this.comboBarEl.classList.add('is-broken');
+      setTimeout(() => {
+        if (this.comboBarEl) this.comboBarEl.classList.remove('is-broken');
+      }, 450);
+    }
+
+    const oopsMessages = [
+      'Oops, we needed that one!',
+      `Oops, we needed "${bubble.char}"!`,
+      'Oops, we needed that letter! Wait for it to float back!'
+    ];
+    const msg = oopsMessages[Math.floor(this.prng() * oopsMessages.length)];
+    this._showMascotMessage(msg, 2400);
+
+    this._updateComboUI();
   }
 
   /**

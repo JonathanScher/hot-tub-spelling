@@ -141,31 +141,42 @@ describe('Impostor Pop: Distractor Flicking & Impulse Control Mechanics', () => 
       expect(state.wordErrorCount).toBe(1);
     });
 
-    it('shields the target letter from being accidentally popped via flicking', () => {
+    it('flicks away the target letter, resets combo to 0, and applies no SRS error penalty', () => {
       // GIVEN word "enfin", target required char is 'e'
       let state = createGameState({
         sessionWords: [{ word: 'enfin' }],
         seed: 999
       });
+
+      // Build a combo of 2 by flicking distractors first
+      const d1 = spawnBubbleOnState(state)!;
+      d1.char = 'z';
+      const d2 = spawnBubbleOnState(state)!;
+      d2.char = 'k';
+      state = stepGame(state, { type: 'FLICK_BUBBLE', bubbleId: d1.id });
+      state = stepGame(state, { type: 'FLICK_BUBBLE', bubbleId: d2.id });
+      expect(state.combo).toBe(2);
+      expect(state.impostorCombo).toBe(2);
+
       const targetBubble = state.bubbles.find((b) => b.char === 'e' && b.state === 'floating')!;
       expect(targetBubble).toBeDefined();
 
-      // WHEN attempting to flick the required target letter 'e'
+      // WHEN flicking the required target letter 'e'
       const nextState = stepGame(state, { type: 'FLICK_BUBBLE', bubbleId: targetBubble.id });
 
-      // THEN the target bubble is NOT removed or popped as an impostor
+      // THEN the target bubble flies away and is removed from floating bubbles
       const targetStillFloating = nextState.bubbles.find((b) => b.id === targetBubble.id);
-      expect(targetStillFloating).toBeDefined();
-      expect(targetStillFloating!.state).toBe('floating');
+      expect(targetStillFloating).toBeUndefined();
 
-      // AND combo does not increment and no error penalty is applied
+      // AND combo is reset to 0 while maxCombo is preserved
       expect(nextState.combo).toBe(0);
       expect(nextState.impostorCombo).toBe(0);
-      expect(nextState.wordErrorCount).toBe(0);
+      expect(nextState.maxCombo).toBe(2);
 
-      // AND the target bubble can still be correctly tapped afterwards
-      const afterTap = stepGame(nextState, { type: 'TAP_BUBBLE', bubbleId: targetBubble.id });
-      expect(afterTap.currentIndex).toBe(1);
+      // AND no harsh SRS error penalty is applied and slot index does not advance
+      expect(nextState.wordErrorCount).toBe(0);
+      expect(nextState.letterErrorCount).toBe(0);
+      expect(nextState.currentIndex).toBe(0);
     });
 
     it('supports alias action type SWIPE_BUBBLE identically to FLICK_BUBBLE', () => {
@@ -202,17 +213,23 @@ describe('Impostor Pop: Distractor Flicking & Impulse Control Mechanics', () => 
       expect(distractor.state).toBe('popping');
     });
 
-    it('returns isDistractor: false and does not pop the bubble when flicking the target letter', () => {
+    it('returns handled: true, isDistractor: false, and targetFlickedAway: true while resetting combo when flicking the target letter', () => {
       const state = createGameState({
         sessionWords: [{ word: 'enfin' }],
         seed: 222
       });
+      state.combo = 3;
+      state.impostorCombo = 3;
       const target = state.bubbles.find((b) => b.char === 'e')!;
 
       const res = (handleBubbleFlickOnState as any)(state, target.id);
+      expect(res.handled).toBe(true);
       expect(res.isDistractor).toBe(false);
-      expect(target.state).toBe('floating');
+      expect(res.targetFlickedAway).toBe(true);
+      expect(target.state).not.toBe('floating');
+      expect(state.combo).toBe(0);
       expect(state.impostorCombo).toBe(0);
+      expect(state.wordErrorCount).toBe(0);
     });
 
     it('safely handles non-existent bubble IDs or inactive states', () => {

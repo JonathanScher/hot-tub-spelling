@@ -117,6 +117,43 @@ class SoundSynthesizer {
    * Playful whoosh-pop sound when flicking away a distractor bubble.
    * Rewarding and crisp for impulse control.
    */
+  /**
+   * Gentle downward swoosh + two-note "uh-oh" marimba cue when the required target letter is flicked away.
+   * Distinct from distractor flick whoosh so the player hears they discarded a needed letter.
+   */
+  playTargetFlickOops() {
+    if (!this._ensureReady()) return;
+
+    const now = this.ctx.currentTime;
+
+    // Downward airy swoosh (1600Hz -> 380Hz)
+    if (this.noiseBuffer) {
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = this.noiseBuffer;
+
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(1600, now);
+      filter.frequency.exponentialRampToValueAtTime(380, now + 0.18);
+      filter.Q.value = 2.4;
+
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(0.22, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.20);
+
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.masterGain);
+      noise.start(now);
+      noise.stop(now + 0.21);
+    }
+
+    // Descending two-note "uh-oh" wooden tone (E5 -> A4)
+    this._playWarmBellNote(659.25, now + 0.01, 0.16, 0.20);
+    this._playWarmBellNote(440.00, now + 0.11, 0.26, 0.24);
+  }
+
   playFlickWhoosh() {
     if (!this._ensureReady()) return;
 

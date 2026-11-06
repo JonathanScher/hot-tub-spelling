@@ -920,7 +920,7 @@ export function handleBubbleTapOnState(state, bubbleOrId) {
  *   combo?: number,
  *   impostorCombo?: number,
  *   impostorPops?: number,
- *   targetShielded?: boolean
+ *   targetFlickedAway?: boolean
  * }}
  */
 export function handleBubbleFlickOnState(state, bubbleOrId) {
@@ -961,12 +961,28 @@ export function handleBubbleFlickOnState(state, bubbleOrId) {
       impostorPops: state.impostorPops
     };
   } else {
-    // Shield the target letter so child does not accidentally discard the required letter
+    // Target letter was flicked away:
+    // Flies away like any other bubble, resets combo to 0, no harsh SRS error penalty
+    bubble.state = 'fizzling';
+    state.combo = 0;
+    state.impostorCombo = 0;
+
+    // Ensure replacement target letter spawns soon if no other matching bubble is floating
+    const hasOtherTarget = state.bubbles.some(
+      (b) => b.id !== bubble.id && b.state === 'floating' && b.char === targetChar
+    );
+    if (!hasOtherTarget) {
+      state.targetSpawnIn = 1 + Math.floor(state.prng() * 2);
+    }
+
     return {
-      handled: false,
+      handled: true,
       isDistractor: false,
+      targetFlickedAway: true,
       bubble,
-      targetShielded: true
+      combo: 0,
+      impostorCombo: 0,
+      impostorPops: state.impostorPops || 0
     };
   }
 }
