@@ -90,6 +90,10 @@ function assertStateInvariants(state: GameState): void {
   if (state.letterErrorCount >= 2) {
     expect(state.watermarkActive).toBe(true);
   }
+  if (typeof (state as any).targetSpawnIn === 'number') {
+    expect((state as any).targetSpawnIn).toBeGreaterThanOrEqual(0);
+    expect((state as any).targetSpawnIn).toBeLessThanOrEqual(3);
+  }
   if (state.currentIndex === state.targetChars.length && state.targetChars.length > 0 && state.running) {
     expect(state.wordTransitioning).toBe(true);
   }

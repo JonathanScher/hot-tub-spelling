@@ -11,12 +11,13 @@ import {
   computeBubbleDiameter,
   chooseNextBubbleCharOnState,
   spawnBubbleOnState,
+  hasTargetInLowerTwoThirds,
   clampDeltaTime
 } from '../../js/game-core.js';
 
 describe('Bubble Spawning & Upward Kinematics (js/game-core.js)', () => {
   describe('Initial Wave & Smart Spawning Algorithm', () => {
-    it('spawns 5 initial staggered bubbles at session start with bubble #3 guaranteed to match targetChars[0]', () => {
+    it('guarantees at least one bubble with targetChars[0] in the lower two-thirds of the screen and randomizes whether it enters on spawn 1, 2, or 3', () => {
       // GIVEN a single-word session ("câlin") on a 360x420 stage with seed 101
       const sessionWords = [{ word: 'câlin', week_label: 'Week 8' }];
 
@@ -29,7 +30,7 @@ describe('Bubble Spawning & Upward Kinematics (js/game-core.js)', () => {
         seed: 101
       });
 
-      // THEN 5 floating bubbles are spawned with staggered initial Y coordinates and bubble #3 is 'c'
+      // THEN 5 floating bubbles are spawned with staggered initial Y coordinates in the lower two-thirds
       expect(state.running).toBe(true);
       expect(state.bubbles).toHaveLength(MIN_BUBBLES);
       expect(state.spawnCounter).toBe(5);
@@ -41,34 +42,58 @@ describe('Bubble Spawning & Upward Kinematics (js/game-core.js)', () => {
         expect(b.y).toBeCloseTo(expectedY, 5);
         expect(b.state).toBe('floating');
         expect(b.age).toBe(0);
+        expect(b.y).toBeGreaterThanOrEqual(420 / 3); // in lower two-thirds
       });
 
-      // Every 3rd bubble (index 2, id 3) MUST be targetChars[0] ('c')
-      expect(state.bubbles[2].char).toBe('c');
+      // Target character 'c' is guaranteed to be in the lower two-thirds
+      expect(hasTargetInLowerTwoThirds(state)).toBe(true);
+
+      // Verify across different seeds that the target enters on spawn 1, 2, or 3 (index 0, 1, or 2)
+      // rather than being hardcoded to bubble #3
+      const firstTargetIndices = new Set();
+      for (const seed of [101, 102, 105, 200, 305, 410, 500]) {
+        const s = createGameState({ sessionWords, stageWidth: 360, stageHeight: 420, seed });
+        const idx = s.bubbles.findIndex((b) => b.char === 'c');
+        expect(idx).toBeGreaterThanOrEqual(0);
+        expect(idx).toBeLessThanOrEqual(2); // must enter on spawn 1, 2, or 3
+        firstTargetIndices.add(idx);
+      }
+      expect(firstTargetIndices.size).toBeGreaterThan(1);
     });
 
-    it('strictly enforces Rule 1 (every 3rd spawn is targetChars[currentIndex]), Rule 2 (30% future letter), and Rule 3 (70% distractor)', () => {
+    it('randomizes target spawn intervals to 1, 2, or 3 spawns instead of fixed every-3rd-bubble', () => {
       // GIVEN a game state on word "printemps" at index 0 ('p')
       const state = createGameState({
-        sessionWords: [{ word: 'printemps' }],
+        sessionWords: [{ word: 'maison' }],
         seed: 777
       });
 
-      // WHEN we sample 30 consecutive characters via chooseNextBubbleCharOnState
-      const startCounter = state.spawnCounter; // 5 from initial wave
-      const sampled: Array<{ count: number; char: string }> = [];
-      for (let i = 0; i < 30; i++) {
+      // WHEN we sample 60 consecutive characters via chooseNextBubbleCharOnState
+      const sampled = [];
+      for (let i = 0; i < 60; i++) {
         const ch = chooseNextBubbleCharOnState(state);
         sampled.push({ count: state.spawnCounter, char: ch });
       }
 
-      // THEN every spawn where spawnCounter % 3 === 0 is strictly 'p'
-      expect(state.spawnCounter).toBe(startCounter + 30);
-      for (const item of sampled) {
-        if (item.count % 3 === 0) {
-          expect(item.char).toBe('p');
+      // THEN target spawns ('m') occur with intervals in {1, 2, 3} and never exceed 3
+      const targetIndices = [];
+      sampled.forEach((item, idx) => {
+        if (item.char === 'm') {
+          targetIndices.push(idx);
         }
+      });
+
+      expect(targetIndices.length).toBeGreaterThan(0);
+      const intervals = [];
+      for (let i = 1; i < targetIndices.length; i++) {
+        const gap = targetIndices[i] - targetIndices[i - 1];
+        intervals.push(gap);
+        expect(gap).toBeGreaterThanOrEqual(1);
+        expect(gap).toBeLessThanOrEqual(3);
       }
+      // Target interval is randomized (contains varied intervals rather than only 3)
+      const uniqueIntervals = new Set(intervals);
+      expect(uniqueIntervals.size).toBeGreaterThan(1);
     });
 
     it('returns fallback "a" when chooseNextBubbleCharOnState is called after all targetChars are already matched', () => {

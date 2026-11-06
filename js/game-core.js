@@ -96,6 +96,7 @@ export const CHEER_MESSAGES_PRACTICE = [
  * @property {number} nextBubbleId
  * @property {number} spawnCounter
  * @property {number} spawnTimer
+ * @property {number} targetSpawnIn
  * @property {number} stageWidth
  * @property {number} stageHeight
  * @property {string | null} lastCheerMessage
@@ -192,6 +193,7 @@ export function cloneGameState(state) {
     nextBubbleId: state.nextBubbleId,
     spawnCounter: state.spawnCounter,
     spawnTimer: state.spawnTimer,
+    targetSpawnIn: state.targetSpawnIn,
     stageWidth: state.stageWidth,
     stageHeight: state.stageHeight,
     lastCheerMessage: state.lastCheerMessage,
@@ -244,6 +246,7 @@ export function createGameState(config = {}) {
     nextBubbleId: 1,
     spawnCounter: 0,
     spawnTimer: 0,
+    targetSpawnIn: 0,
     stageWidth,
     stageHeight,
     lastCheerMessage: null,
@@ -274,9 +277,26 @@ export function computeBubbleDiameter(stageRect) {
 }
 
 /**
+ * Checks whether at least one floating bubble matching the current target letter
+ * is present in the lower two-thirds of the screen (`y >= stageHeight / 3`).
+ * @param {GameState} state
+ * @param {string | null} [targetChar=null]
+ * @returns {boolean}
+ */
+export function hasTargetInLowerTwoThirds(state, targetChar = null) {
+  const req = targetChar || state.targetChars[state.currentIndex];
+  if (!req) return false;
+  const threshold = state.stageHeight / 3;
+  return state.bubbles.some(
+    (b) => b.state === 'floating' && b.char === req && b.y >= threshold
+  );
+}
+
+/**
  * Smart Spawning Algorithm:
  * - Increments `state.spawnCounter += 1`.
- * - Every 3rd bubble (`spawnCounter % 3 === 0`) MUST be `targetChars[currentIndex]`.
+ * - Randomizes target letter entrance on spawn 1, 2, or 3 (`targetSpawnIn`).
+ * - Guarantees target letter in lower two-thirds (`y >= stageHeight / 3`).
  * - 30% of remaining bubbles are future letters from `targetChars.slice(currentIndex + 1)`.
  * - 70% of remaining bubbles are plausible distractor letters.
  *
@@ -288,15 +308,22 @@ export function chooseNextBubbleCharOnState(state) {
   const requiredChar = state.targetChars[state.currentIndex];
   if (!requiredChar) return 'a';
 
-  // Rule 1: Every 3rd bubble MUST be the exact next required letter
-  if (state.spawnCounter % 3 === 0) {
+  if (typeof state.targetSpawnIn !== 'number' || state.targetSpawnIn <= 0) {
+    const r = state.prng();
+    state.targetSpawnIn = r < 0.25 ? 1 : (r < 0.50 ? 2 : 3);
+  }
+
+  state.targetSpawnIn -= 1;
+
+  // Rule 1: Target letter enters when target countdown reaches 0
+  if (state.targetSpawnIn === 0) {
+    const r = state.prng();
+    state.targetSpawnIn = r < 0.25 ? 1 : (r < 0.50 ? 2 : 3);
     return requiredChar;
   }
 
   // Rule 2: 30% of remaining bubbles are future letters from the current word
   const futureChars = state.targetChars.slice(state.currentIndex + 1);
-  // CHARACTERIZATION NOTE: If futureChars.length > 0, prng() is consumed for the < 0.30 check even when it fails.
-  // If futureChars is empty (last letter of word), prng() is NOT consumed for the 0.30 check.
   if (futureChars.length > 0 && state.prng() < 0.30) {
     return futureChars[Math.floor(state.prng() * futureChars.length)];
   }
@@ -328,8 +355,6 @@ export function chooseNextBubbleCharOnState(state) {
  */
 export function pickNonOverlappingXOnState(state, minX, maxX, spawnY, diameter) {
   const candidates = 7;
-  // CHARACTERIZATION NOTE: Initial bestX consumes 1 PRNG roll before the 7 stratified candidate rolls,
-  // even though candidate i=0 (nearest >= 0 > -1) always replaces bestX on the first loop iteration.
   let bestX = minX + state.prng() * (maxX - minX);
   let bestMinDist = -1;
 
@@ -354,14 +379,14 @@ export function pickNonOverlappingXOnState(state, minX, maxX, spawnY, diameter) 
 }
 
 /**
- * Spawns a single bubble on `state` (mutating `state.bubbles`, `state.nextBubbleId`, `state.spawnCounter`, and `state.prng`).
- * Returns the newly created `BubbleEntity` or `null` if spawning is guarded off.
- *
+ * Spawns a bubble with an explicit character on `state`.
  * @param {GameState} state
+ * @param {string} char
  * @param {number | null} [overrideY=null]
+ * @param {boolean} [incrementCounter=false]
  * @returns {BubbleEntity | null}
  */
-export function spawnBubbleOnState(state, overrideY = null) {
+export function spawnBubbleWithCharOnState(state, char, overrideY = null, incrementCounter = false) {
   if (state.wordTransitioning || state.currentIndex >= state.targetChars.length) {
     return null;
   }
@@ -378,7 +403,10 @@ export function spawnBubbleOnState(state, overrideY = null) {
 
   const startY = overrideY !== null ? overrideY : height + radius * 0.55;
   const baseX = pickNonOverlappingXOnState(state, safeMinX, safeMaxX, startY, diameter);
-  const char = chooseNextBubbleCharOnState(state);
+
+  if (incrementCounter) {
+    state.spawnCounter += 1;
+  }
 
   // Calm, relaxing upward speed (~7.8 to 9.8 seconds to cross full arena height)
   const traverseSeconds = 7.8 + state.prng() * 2.0;
@@ -405,6 +433,26 @@ export function spawnBubbleOnState(state, overrideY = null) {
 
   state.bubbles.push(bubbleObj);
   return bubbleObj;
+}
+
+/**
+ * Spawns a single bubble on `state` (mutating `state.bubbles`, `state.nextBubbleId`, `state.spawnCounter`, and `state.prng`).
+ * Returns the newly created `BubbleEntity` or `null` if spawning is guarded off.
+ *
+ * @param {GameState} state
+ * @param {number | null} [overrideY=null]
+ * @returns {BubbleEntity | null}
+ */
+export function spawnBubbleOnState(state, overrideY = null) {
+  if (state.wordTransitioning || state.currentIndex >= state.targetChars.length) {
+    return null;
+  }
+  const width = state.stageWidth;
+  const height = state.stageHeight;
+  if (width < 40 || height < 40) return null;
+
+  const char = chooseNextBubbleCharOnState(state);
+  return spawnBubbleWithCharOnState(state, char, overrideY, false);
 }
 
 /**
@@ -513,6 +561,7 @@ export function startNextWordOnState(state) {
   state.wordTransitioning = false;
   state.spawnCounter = 0;
   state.spawnTimer = 0;
+  state.targetSpawnIn = 1 + Math.floor(state.prng() * 3);
 
   // CHARACTERIZATION NOTE: If a word in the queue normalizes to 0 characters (empty string),
   // currentIndex (0) >= targetChars.length (0), so spawnInitialWaveOnState is a no-op.
@@ -568,7 +617,8 @@ export function useHintOnState(state) {
  *   matchedSlotIndex?: number,
  *   matchedChar?: string,
  *   wordCompleted?: boolean,
- *   autoWatermarkTriggered?: boolean
+ *   autoWatermarkTriggered?: boolean,
+ *   urgentSpawned?: BubbleEntity[]
  * }}
  */
 export function handleBubbleTapOnState(state, bubbleOrId) {
@@ -600,16 +650,51 @@ export function handleBubbleTapOnState(state, bubbleOrId) {
     state.currentIndex += 1;
     state.letterErrorCount = 0;
 
-    // Ensure next 3rd spawn cycle delivers the new required letter promptly if not already floating
+    /** @type {BubbleEntity[]} */
+    const urgentSpawned = [];
+
+    // Ensure next required letter delivers promptly if not already floating
     const nextRequired = state.targetChars[state.currentIndex];
-    if (
-      nextRequired &&
-      !state.bubbles.some((b) => b.state === 'floating' && b.char === nextRequired)
-    ) {
-      state.spawnCounter = 2;
+    const wordCompleted = state.currentIndex >= state.targetChars.length;
+
+    if (!wordCompleted && nextRequired) {
+      const hasMatchingFloating = state.bubbles.some(
+        (b) => b.state === 'floating' && b.char === nextRequired
+      );
+
+      if (!hasMatchingFloating) {
+        // When a tap triggers urgent spawn, spawn two bubbles at once (target letter + one high-weight distractor)
+        const activeFloating = state.bubbles.filter((b) => b.state === 'floating');
+        if (activeFloating.length + 2 > MAX_BUBBLES) {
+          const excess = activeFloating.length + 2 - MAX_BUBBLES;
+          const candidates = activeFloating.filter((b) => b.char !== nextRequired);
+          for (let i = 0; i < excess && i < candidates.length; i++) {
+            removeBubbleOnState(state, candidates[i]);
+          }
+        }
+
+        const bTarget = spawnBubbleWithCharOnState(state, nextRequired, null, false);
+        const distractors = getPlausibleDistractors(
+          nextRequired,
+          state.currentWordObj ? state.currentWordObj.word : '',
+          state.allVocabWords,
+          state.currentIndex
+        );
+        const distractorChar =
+          distractors.length > 0
+            ? distractors[Math.floor(state.prng() * distractors.length)]
+            : nextRequired === 'e' ? 'a' : 'e';
+        const bDistractor = spawnBubbleWithCharOnState(state, distractorChar, null, false);
+
+        if (bTarget) urgentSpawned.push(bTarget);
+        if (bDistractor) urgentSpawned.push(bDistractor);
+
+        const rUrgent = state.prng();
+        state.targetSpawnIn = rUrgent < 0.25 ? 1 : (rUrgent < 0.50 ? 2 : 3);
+        state.spawnCounter = 2;
+      }
     }
 
-    const wordCompleted = state.currentIndex >= state.targetChars.length;
     if (wordCompleted) {
       state.wordTransitioning = true;
     }
@@ -621,7 +706,8 @@ export function handleBubbleTapOnState(state, bubbleOrId) {
       matchedSlotIndex,
       matchedChar,
       wordCompleted,
-      autoWatermarkTriggered: false
+      autoWatermarkTriggered: false,
+      urgentSpawned
     };
   } else {
     bubble.state = 'fizzling';

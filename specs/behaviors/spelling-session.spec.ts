@@ -46,7 +46,7 @@ describe('Sequential Spelling, Hint Scaffolding & Session Mastery (js/game-core.
       expect(afterCorrectTap.wordErrorCount).toBe(1);
     });
 
-    it('sets spawnCounter = 2 on correct tap if the newly required character is not currently floating', () => {
+    it('spawns two bubbles at once (target letter plus high-weight distractor) on correct tap when the newly required character is not currently floating', () => {
       // GIVEN a game state on word "loin" where 'l' is floating, and no floating bubble has 'o'
       const state = createGameState({
         sessionWords: [{ word: 'loin' }],
@@ -57,15 +57,26 @@ describe('Sequential Spelling, Hint Scaffolding & Session Mastery (js/game-core.
       }
       const lBubble = state.bubbles.find((b) => b.char === 'l')!;
       expect(state.spawnCounter).toBe(5);
+      const initialFloatingCount = state.bubbles.filter((b) => b.state === 'floating').length;
 
       // WHEN tapping the correct 'l' bubble
       const nextState = stepGame(state, { type: 'TAP_BUBBLE', bubbleId: lBubble.id });
 
-      // THEN spawnCounter is set to 2 so the very next bubble spawned (3 % 3 === 0) is guaranteed to be 'o'
+      // THEN urgent spawn triggers immediately, spawning two bubbles at once (target 'o' + high-weight distractor)
       expect(nextState.currentIndex).toBe(1);
-      expect(nextState.spawnCounter).toBe(2);
-      const nextSpawned = spawnBubbleOnState(nextState)!;
-      expect(nextSpawned.char).toBe('o');
+      const oBubbles = nextState.bubbles.filter((b) => b.state === 'floating' && b.char === 'o');
+      expect(oBubbles).toHaveLength(1);
+
+      // 'l' was removed (-1) and two new bubbles spawned (+2), so floating count increased by 1
+      const newFloatingCount = nextState.bubbles.filter((b) => b.state === 'floating').length;
+      expect(newFloatingCount).toBe(initialFloatingCount + 1);
+
+      // Both newly spawned bubbles are in the lower arena and have distinct baseX positions
+      const newBubbles = nextState.bubbles.slice(-2);
+      expect(newBubbles[0].char === 'o' || newBubbles[1].char === 'o').toBe(true);
+      expect(newBubbles[0].baseX).not.toBe(newBubbles[1].baseX);
+      expect(newBubbles[0].y).toBeGreaterThanOrEqual(nextState.stageHeight / 3);
+      expect(newBubbles[1].y).toBeGreaterThanOrEqual(nextState.stageHeight / 3);
     });
   });
 

@@ -30,6 +30,8 @@ import {
   chooseNextBubbleCharOnState,
   pickNonOverlappingXOnState,
   spawnBubbleOnState,
+  spawnBubbleWithCharOnState,
+  hasTargetInLowerTwoThirds,
   useHintOnState,
   handleBubbleTapOnState,
   clampDeltaTime
@@ -118,6 +120,8 @@ export class HotTubGame {
     this.nextBubbleId = 1;
     this.spawnCounter = 0;
     this.spawnTimer = 0;
+    this.targetSpawnIn = 1 + Math.floor(this.prng() * 3);
+    this.targetSpawnIn = 0;
     this.lastFrameTime = 0;
     /** @type {number | null} */
     this.rafId = null;
@@ -399,6 +403,41 @@ export class HotTubGame {
   }
 
   /**
+   * Mounts a DOM button element for a newly spawned bubble entity.
+   * @param {import('./game-core.js').BubbleEntity} bubbleObj
+   */
+  _mountBubbleElement(bubbleObj) {
+    if (!this.stage || typeof document === 'undefined') return;
+
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'soap-bubble';
+    if (!this.bubbleImgAvailable) {
+      el.classList.add('use-svg-fallback');
+    }
+    el.style.width = `${bubbleObj.diameter}px`;
+    el.style.height = `${bubbleObj.diameter}px`;
+    el.setAttribute('aria-label', `Letter ${bubbleObj.char}`);
+
+    const innerHtml = `
+      <span class="bubble-art" aria-hidden="true"></span>
+      <span class="bubble-char">${this._escapeHtml(bubbleObj.char)}</span>
+    `;
+    el.innerHTML = innerHtml;
+
+    bubbleObj.el = el;
+
+    el.addEventListener('pointerdown', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      this._handleBubbleTap(bubbleObj);
+    });
+
+    this._positionBubbleElement(bubbleObj);
+    this.stage.appendChild(el);
+  }
+
+  /**
    * @param {number | null} [overrideY=null]
    */
   _spawnBubble(overrideY = null) {
@@ -414,34 +453,7 @@ export class HotTubGame {
     const bubbleObj = spawnBubbleOnState(this, overrideY);
     if (!bubbleObj) return;
 
-    if (typeof document !== 'undefined') {
-      const el = document.createElement('button');
-      el.type = 'button';
-      el.className = 'soap-bubble';
-      if (!this.bubbleImgAvailable) {
-        el.classList.add('use-svg-fallback');
-      }
-      el.style.width = `${bubbleObj.diameter}px`;
-      el.style.height = `${bubbleObj.diameter}px`;
-      el.setAttribute('aria-label', `Letter ${bubbleObj.char}`);
-
-      const innerHtml = `
-        <span class="bubble-art" aria-hidden="true"></span>
-        <span class="bubble-char">${this._escapeHtml(bubbleObj.char)}</span>
-      `;
-      el.innerHTML = innerHtml;
-
-      bubbleObj.el = el;
-
-      el.addEventListener('pointerdown', (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
-        this._handleBubbleTap(bubbleObj);
-      });
-
-      this._positionBubbleElement(bubbleObj);
-      this.stage.appendChild(el);
-    }
+    this._mountBubbleElement(bubbleObj);
   }
 
   /**
@@ -492,6 +504,12 @@ export class HotTubGame {
   _onCorrectBubbleTap(bubble) {
     const res = handleBubbleTapOnState(this, bubble);
     if (!res.handled || !res.correct) return;
+
+    if (Array.isArray(res.urgentSpawned) && res.urgentSpawned.length > 0) {
+      for (const b of res.urgentSpawned) {
+        this._mountBubbleElement(b);
+      }
+    }
 
     const matchedSlotIndex = /** @type {number} */ (res.matchedSlotIndex);
     const matchedChar = /** @type {string} */ (res.matchedChar);
