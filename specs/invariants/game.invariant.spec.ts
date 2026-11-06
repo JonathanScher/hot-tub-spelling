@@ -66,9 +66,6 @@ function assertStateInvariants(state: GameState): void {
   expect(state.masteredCount).toBeGreaterThanOrEqual(0);
   expect(state.masteredCount).toBeLessThanOrEqual(state.totalUniqueWords);
   expect(state.sessionResults.length).toBeLessThanOrEqual(state.totalUniqueWords);
-  expect((state as any).combo).toBeGreaterThanOrEqual(0);
-  expect((state as any).impostorCombo).toBeGreaterThanOrEqual(0);
-  expect((state as any).impostorPops).toBeGreaterThanOrEqual(0);
 
   const floatingBubbles = state.bubbles.filter((b) => b.state === 'floating');
   expect(floatingBubbles.length).toBeLessThanOrEqual(MAX_BUBBLES);
@@ -151,7 +148,6 @@ type SymbolicCommand =
   | { kind: 'TICK'; dt: number }
   | { kind: 'TAP_INDEX'; indexSelector: number }
   | { kind: 'TAP_REQUIRED_IF_PRESENT' }
-  | { kind: 'FLICK_INDEX'; indexSelector: number }
   | { kind: 'USE_HINT' }
   | { kind: 'COMPLETE_WORD' }
   | { kind: 'PAUSE' }
@@ -169,10 +165,6 @@ const symbolicCommandArb: fc.Arbitrary<SymbolicCommand> = fc.oneof(
     arbitrary: fc.nat(20).map((indexSelector): SymbolicCommand => ({ kind: 'TAP_INDEX', indexSelector }))
   },
   { weight: 6, arbitrary: fc.constant<SymbolicCommand>({ kind: 'TAP_REQUIRED_IF_PRESENT' }) },
-  {
-    weight: 4,
-    arbitrary: fc.nat(20).map((indexSelector): SymbolicCommand => ({ kind: 'FLICK_INDEX', indexSelector }))
-  },
   { weight: 2, arbitrary: fc.constant<SymbolicCommand>({ kind: 'USE_HINT' }) },
   { weight: 4, arbitrary: fc.constant<SymbolicCommand>({ kind: 'COMPLETE_WORD' }) },
   { weight: 1, arbitrary: fc.constant<SymbolicCommand>({ kind: 'PAUSE' }) },
@@ -206,13 +198,6 @@ function resolveSymbolicCommand(state: GameState, cmd: SymbolicCommand): GameAct
         return { type: 'TAP_BUBBLE', bubbleId: state.bubbles[0].id };
       }
       return { type: 'TICK', dt: 0.03 };
-    }
-    case 'FLICK_INDEX': {
-      if (state.bubbles.length === 0) {
-        return { type: 'FLICK_BUBBLE' as any, bubbleId: 999999 };
-      }
-      const target = state.bubbles[cmd.indexSelector % state.bubbles.length];
-      return { type: 'FLICK_BUBBLE' as any, bubbleId: target.id };
     }
     case 'USE_HINT':
       return { type: 'USE_HINT' };

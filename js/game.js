@@ -37,7 +37,6 @@ import {
   useHintOnState,
   isSlotWatermarkVisible,
   handleBubbleTapOnState,
-  handleBubbleFlickOnState,
   clampDeltaTime,
   getNextUnfilledIndex
 } from './game-core.js';
@@ -70,7 +69,6 @@ export class HotTubGame {
    * @param {(summary: import('./game-core.js').SessionSummary) => void} [config.onSessionComplete]
    * @param {number} [config.seed] - Optional seed for deterministic PRNG
    * @param {import('./prng.js').SeededPRNG | (() => number)} [config.prng] - Optional injectable PRNG
-   * @param {boolean} [config.impostorMode]
    */
   constructor(config = {}) {
     this.stage = config.bubbleStage || null;
@@ -143,15 +141,6 @@ export class HotTubGame {
     this.mascotHideTimeout = null;
     this.bubbleImgAvailable = true;
 
-    this.combo = 0;
-    this.impostorCombo = 0;
-    this.impostorPops = 0;
-    this.maxCombo = 0;
-    this.impostorMode = config.impostorMode !== false;
-    this.comboBarEl = typeof document !== 'undefined' ? document.getElementById('companion-combo-bar') : null;
-    this.comboCountEl = typeof document !== 'undefined' ? document.getElementById('combo-count') : null;
-    this.comboMeterFillEl = typeof document !== 'undefined' ? document.getElementById('combo-meter-fill') : null;
-
     const bounds = this._getStageBounds();
     this.stageWidth = bounds.width;
     this.stageHeight = bounds.height;
@@ -219,12 +208,6 @@ export class HotTubGame {
     this.sessionSummary = null;
     this.lastCheerMessage = null;
     this.trapHistory = getProfileTrapHistory();
-
-    this.combo = 0;
-    this.impostorCombo = 0;
-    this.impostorPops = 0;
-    this.maxCombo = 0;
-    this._updateComboUI();
 
     this.running = true;
     this.paused = false;
@@ -483,86 +466,10 @@ export class HotTubGame {
 
     bubbleObj.el = el;
 
-    let startX = 0;
-    let startY = 0;
-    let isSwiping = false;
-    let pointerActive = false;
-    let activePointerId = null;
-
-    el.title = 'Click to spell • Drag/Flick or Right-click to discard distractor';
-
     el.addEventListener('pointerdown', (ev) => {
       ev.preventDefault();
       ev.stopPropagation();
-
-      // Right-click or Shift+Click: instant desktop flick shortcut
-      if (ev.button === 2 || ev.shiftKey) {
-        this._handleBubbleFlick(bubbleObj, { dx: 140, dy: -60 });
-        return;
-      }
-
-      pointerActive = true;
-      activePointerId = ev.pointerId;
-      startX = ev.clientX;
-      startY = ev.clientY;
-      isSwiping = false;
-      try {
-        el.setPointerCapture(ev.pointerId);
-      } catch (_) {}
-    });
-
-    el.addEventListener('pointermove', (ev) => {
-      if (!pointerActive || ev.pointerId !== activePointerId) return;
-      const dx = ev.clientX - startX;
-      const dy = ev.clientY - startY;
-      const dist = Math.hypot(dx, dy);
-
-      // Drag threshold of 14px triggers flick/swipe gesture on desktop mouse or touch
-      if (dist >= 14 && !isSwiping) {
-        isSwiping = true;
-        pointerActive = false;
-        try {
-          el.releasePointerCapture(ev.pointerId);
-        } catch (_) {}
-        this._handleBubbleFlick(bubbleObj, { dx, dy });
-      }
-    });
-
-    el.addEventListener('pointerup', (ev) => {
-      if (pointerActive && ev.pointerId === activePointerId) {
-        pointerActive = false;
-        try {
-          el.releasePointerCapture(ev.pointerId);
-        } catch (_) {}
-        if (!isSwiping) {
-          this._handleBubbleTap(bubbleObj);
-        }
-      }
-    });
-
-    el.addEventListener('pointercancel', () => {
-      pointerActive = false;
-      isSwiping = false;
-    });
-
-    // Desktop Right-Click: instant distractor flick
-    el.addEventListener('contextmenu', (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      this._handleBubbleFlick(bubbleObj, { dx: 140, dy: -60 });
-    });
-
-    // Desktop Double-Click: instant distractor flick
-    el.addEventListener('dblclick', (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      this._handleBubbleFlick(bubbleObj, { dx: 140, dy: -60 });
-    });
-
-    el.addEventListener('flick', (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      this._handleBubbleFlick(bubbleObj, (/** @type {any} */ (ev)).detail || null);
+      this._handleBubbleTap(bubbleObj);
     });
 
     this._positionBubbleElement(bubbleObj);
@@ -606,203 +513,6 @@ export class HotTubGame {
   }
 
   /**
-   * Public interface to flick a bubble (Impostor Pop mechanic).
-   * @param {number | import('./game-core.js').BubbleEntity} bubbleOrId
-   * @param {{ dx?: number, dy?: number } | null} [gesture=null]
-   */
-  flickBubble(bubbleOrId, gesture = null) {
-    const bubble =
-      typeof bubbleOrId === 'number'
-        ? this.bubbles.find((b) => b.id === bubbleOrId)
-        : bubbleOrId;
-    if (!bubble) return { handled: false, isDistractor: false };
-    return this._handleBubbleFlick(bubble, gesture);
-  }
-
-  /**
-   * @param {import('./game-core.js').BubbleEntity} bubble
-   * @param {{ dx?: number, dy?: number } | null} [gesture=null]
-   */
-  _handleBubbleFlick(bubble, gesture = null) {
-    if (
-      !this.running ||
-      this.paused ||
-      this.wordTransitioning ||
-      bubble.state !== 'floating' ||
-      this.currentIndex >= this.targetChars.length
-    ) {
-      return { handled: false, isDistractor: false };
-    }
-
-    const res = handleBubbleFlickOnState(this, bubble);
-    if (!res.handled) {
-      return res;
-    }
-
-    if (!res.isDistractor) {
-      this._onTargetFlickedAway(bubble, gesture, res);
-      return res;
-    }
-
-    this._onDistractorFlicked(bubble, gesture, res);
-    return res;
-  }
-
-  /**
-   * Launches the bubble from its exact current spot along the flick vector with elastic
-   * squash-and-stretch, spawns trailing soap droplets, and bursts into foam mid-flight.
-   * @param {import('./game-core.js').BubbleEntity} bubble
-   * @param {{ dx?: number, dy?: number } | null} gesture
-   * @param {boolean} isTargetOops
-   */
-  _animateFlickTossAndBurst(bubble, gesture, isTargetOops = false) {
-    const dx = gesture && typeof gesture.dx === 'number' ? gesture.dx : 120;
-    const dy = gesture && typeof gesture.dy === 'number' ? gesture.dy : -65;
-    const angle = Math.atan2(dy, dx);
-    const dist = 148;
-    const tx = Math.cos(angle) * dist;
-    const ty = Math.sin(angle) * dist;
-    const rotDeg = (tx >= 0 ? 1 : -1) * 28;
-
-    if (bubble.el) {
-      // Keep bubble.el anchored at its translate3d(left, top, 0) stage coordinates
-      // and drive the toss trajectory on child layers via CSS variables
-      bubble.el.style.setProperty('--flick-tx', `${tx.toFixed(1)}px`);
-      bubble.el.style.setProperty('--flick-ty', `${ty.toFixed(1)}px`);
-      bubble.el.style.setProperty('--flick-rot', `${rotDeg}deg`);
-      bubble.el.classList.add('is-flicked-away');
-      if (isTargetOops) {
-        bubble.el.classList.add('is-flicked-target-oops');
-      }
-    }
-
-    // Spawn 3 trailing soap droplets along the initial launch path
-    if (this.stage && typeof document !== 'undefined') {
-      const trailColors = isTargetOops
-        ? ['#F48F82', '#D96657', '#F9B26C']
-        : ['#BCE0F2', '#FFF6E6', '#B8DEC8'];
-      for (let i = 0; i < 3; i++) {
-        const frac = 0.18 + i * 0.22;
-        const drop = document.createElement('span');
-        drop.className = 'pop-droplet';
-        drop.style.left = `${(bubble.x + tx * frac).toFixed(1)}px`;
-        drop.style.top = `${(bubble.y + ty * frac).toFixed(1)}px`;
-        drop.style.backgroundColor = trailColors[i % trailColors.length];
-        const spreadAngle = angle + (this.prng() - 0.5) * 0.9;
-        const spreadDist = 16 + this.prng() * 18;
-        drop.style.setProperty('--dx', `${(Math.cos(spreadAngle) * spreadDist).toFixed(1)}px`);
-        drop.style.setProperty('--dy', `${(Math.sin(spreadAngle) * spreadDist).toFixed(1)}px`);
-        this.stage.appendChild(drop);
-        setTimeout(() => drop.remove(), 420);
-      }
-    }
-
-    // Mid-flight foam burst right where the tossed bubble pops (~82% along trajectory)
-    setTimeout(() => {
-      this._spawnPopDroplets(
-        bubble.x + tx * 0.82,
-        bubble.y + ty * 0.82,
-        bubble.diameter * 0.92
-      );
-    }, 210);
-
-    setTimeout(() => this._removeBubble(bubble), 340);
-  }
-
-  /**
-   * Visual & audio feedback when the player accidentally flicks away the required target letter.
-   * The bubble launches away with a warm coral/amber tint, bursts mid-flight, resets combo to 0, and shows a gentle "Oops!" message.
-   * @param {import('./game-core.js').BubbleEntity} bubble
-   * @param {{ dx?: number, dy?: number } | null} gesture
-   * @param {any} res
-   */
-  _onTargetFlickedAway(bubble, gesture, res) {
-    if (typeof soundEngine.playTargetFlickOops === 'function') {
-      soundEngine.playTargetFlickOops();
-    } else {
-      soundEngine.playWrongFizzle();
-    }
-
-    this._animateFlickTossAndBurst(bubble, gesture, true);
-
-    if (this.mascotWrap) {
-      this.mascotWrap.classList.remove('is-happy-nod');
-      void this.mascotWrap.offsetWidth;
-      this.mascotWrap.classList.add('is-oops-shake');
-      setTimeout(() => {
-        if (this.mascotWrap) this.mascotWrap.classList.remove('is-oops-shake');
-      }, 450);
-    }
-
-    if (this.comboBarEl) {
-      this.comboBarEl.classList.remove('is-broken');
-      void this.comboBarEl.offsetWidth;
-      this.comboBarEl.classList.add('is-broken');
-      setTimeout(() => {
-        if (this.comboBarEl) this.comboBarEl.classList.remove('is-broken');
-      }, 450);
-    }
-
-    const oopsMessages = [
-      'Oops, we needed that one!',
-      `Oops, we needed "${bubble.char}"!`,
-      'Oops, we needed that letter! Wait for it to float back!'
-    ];
-    const msg = oopsMessages[Math.floor(this.prng() * oopsMessages.length)];
-    this._showMascotMessage(msg, 2400);
-
-    this._updateComboUI();
-  }
-
-  /**
-   * @param {import('./game-core.js').BubbleEntity} bubble
-   * @param {{ dx?: number, dy?: number } | null} gesture
-   * @param {any} res
-   */
-  _onDistractorFlicked(bubble, gesture, res) {
-    if (typeof soundEngine.playFlickWhoosh === 'function') {
-      soundEngine.playFlickWhoosh();
-    } else {
-      soundEngine.playBubblePop(2);
-    }
-
-    this._animateFlickTossAndBurst(bubble, gesture, false);
-
-    // Feed bath companion mascot and praise impulse inhibition
-    this._nudgeMascotHappy();
-    const companionCheers = [
-      'Yum! Distractor splashed!',
-      'Flicked!',
-      'Great impulse control!',
-      'Trap avoided!',
-      'Yummy letter snack!',
-      'Sharp eye!'
-    ];
-    const cheer = companionCheers[Math.floor(this.prng() * companionCheers.length)];
-    this._showMascotMessage(cheer, 1800);
-
-    this._updateComboUI();
-  }
-
-  _updateComboUI() {
-    if (this.comboCountEl) {
-      this.comboCountEl.textContent = String(this.impostorCombo || this.combo || 0);
-    }
-    if (this.comboMeterFillEl) {
-      const count = this.impostorCombo || 0;
-      const pct = Math.min(100, (count / 5) * 100);
-      this.comboMeterFillEl.style.width = `${pct}%`;
-    }
-    if (this.comboBarEl) {
-      if ((this.impostorCombo || 0) > 0) {
-        this.comboBarEl.classList.add('is-active');
-      } else {
-        this.comboBarEl.classList.remove('is-active');
-      }
-    }
-  }
-
-  /**
    * @param {import('./game-core.js').BubbleEntity} bubble
    */
   _handleBubbleTap(bubble) {
@@ -843,12 +553,6 @@ export class HotTubGame {
     const matchedSlotIndex = /** @type {number} */ (res.matchedSlotIndex);
     const matchedChar = /** @type {string} */ (res.matchedChar);
 
-    this.combo = (this.combo || 0) + 1;
-    if (this.combo > this.maxCombo) {
-      this.maxCombo = this.combo;
-    }
-    this._updateComboUI();
-
     soundEngine.playBubblePop(matchedSlotIndex);
     this._spawnPopDroplets(bubble.x, bubble.y, bubble.diameter);
 
@@ -881,9 +585,6 @@ export class HotTubGame {
     if (res.trapCategory) {
       recordTrapError(res.trapCategory);
     }
-    this.combo = 0;
-    this.impostorCombo = 0;
-    this._updateComboUI();
 
     soundEngine.playWrongFizzle();
 
