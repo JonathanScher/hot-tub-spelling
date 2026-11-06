@@ -74,6 +74,7 @@ class SoundSynthesizer {
   }
 
   _ensureReady() {
+    if (typeof window === 'undefined') return false;
     if (!this.ctx) {
       const win = /** @type {Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }} */ (window);
       const AudioCtx = win.AudioContext || win.webkitAudioContext;
@@ -112,6 +113,55 @@ class SoundSynthesizer {
    * Soft water bloop sound when popping the correct letter bubble.
    * @param {number} stepIndex - Current letter index for subtle musical progression.
    */
+  /**
+   * Playful whoosh-pop sound when flicking away a distractor bubble.
+   * Rewarding and crisp for impulse control.
+   */
+  playFlickWhoosh() {
+    if (!this._ensureReady()) return;
+
+    const now = this.ctx.currentTime;
+
+    // Fast upward airy swoosh
+    if (this.noiseBuffer) {
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = this.noiseBuffer;
+
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(600, now);
+      filter.frequency.exponentialRampToValueAtTime(2200, now + 0.12);
+      filter.Q.value = 3.0;
+
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(0.22, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.masterGain);
+      noise.start(now);
+      noise.stop(now + 0.15);
+    }
+
+    // Playful high cheerful chime pop (A5 -> E6)
+    const osc = this.ctx.createOscillator();
+    const oscGain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, now + 0.02);
+    osc.frequency.exponentialRampToValueAtTime(1318.5, now + 0.09);
+
+    oscGain.gain.setValueAtTime(0.001, now + 0.02);
+    oscGain.gain.linearRampToValueAtTime(0.28, now + 0.035);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+
+    osc.connect(oscGain);
+    oscGain.connect(this.masterGain);
+    osc.start(now + 0.02);
+    osc.stop(now + 0.14);
+  }
+
   playBubblePop(stepIndex = 0) {
     if (!this._ensureReady()) return;
 
