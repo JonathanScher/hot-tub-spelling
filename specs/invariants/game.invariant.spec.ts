@@ -6,7 +6,8 @@ import {
   createGameState,
   stepGame,
   type GameAction,
-  type GameState
+  type GameState,
+  isSlotWatermarkVisible
 } from '../../js/game-core.js';
 import {
   getDefaultStarterWords,
@@ -90,6 +91,26 @@ function assertStateInvariants(state: GameState): void {
   if (state.letterErrorCount >= 2) {
     expect(state.watermarkActive).toBe(true);
   }
+
+  if (typeof state.fullWordWatermark !== 'undefined') {
+    expect(typeof state.fullWordWatermark).toBe('boolean');
+  }
+  if (state.watermarkActive && !state.fullWordWatermark) {
+    expect(state.letterErrorCount).toBeGreaterThanOrEqual(2);
+  }
+  for (let idx = 0; idx < state.targetChars.length; idx++) {
+    const visible = isSlotWatermarkVisible(state, idx);
+    if (!state.running || state.wordTransitioning || idx < state.currentIndex) {
+      expect(visible).toBe(false);
+    } else if (state.fullWordWatermark) {
+      expect(visible).toBe(true);
+    } else if (state.watermarkActive && idx === state.currentIndex) {
+      expect(visible).toBe(true);
+    } else {
+      expect(visible).toBe(false);
+    }
+  }
+
   if (state.currentIndex === state.targetChars.length && state.targetChars.length > 0 && state.running) {
     expect(state.wordTransitioning).toBe(true);
   }

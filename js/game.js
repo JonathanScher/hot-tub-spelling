@@ -32,6 +32,7 @@ import {
   pickNonOverlappingXOnState,
   spawnBubbleOnState,
   useHintOnState,
+  isSlotWatermarkVisible,
   handleBubbleTapOnState,
   clampDeltaTime
 } from './game-core.js';
@@ -112,6 +113,7 @@ export class HotTubGame {
     this.watermarkActive = false;
     this.hintWatermarkUsed = false;
     this.wrongTapsOnWord = [];
+    this.fullWordWatermark = false;
     this.wordTransitioning = false;
     this.running = false;
     this.paused = false;
@@ -285,6 +287,7 @@ export class HotTubGame {
     this.watermarkActive = false;
     this.hintWatermarkUsed = false;
     this.wrongTapsOnWord = [];
+    this.fullWordWatermark = false;
     this.wordTransitioning = false;
     this.spawnCounter = 0;
     this.spawnTimer = 0;
@@ -355,15 +358,16 @@ export class HotTubGame {
       const isCurrent = idx === this.currentIndex && !this.wordTransitioning;
       slot.classList.toggle('is-filled', isFilled);
       slot.classList.toggle('is-current', isCurrent);
-      slot.classList.toggle('show-watermark', this.watermarkActive && !isFilled);
+      slot.classList.toggle('show-watermark', isSlotWatermarkVisible(this, idx));
     });
   }
 
   _activateWatermark() {
     this.watermarkActive = true;
     if (this.hintButton) {
-      this.hintButton.classList.add('is-active');
-      this.hintButton.setAttribute('aria-pressed', 'true');
+      const isHintActive = Boolean(this.fullWordWatermark);
+      this.hintButton.classList.toggle('is-active', isHintActive);
+      this.hintButton.setAttribute('aria-pressed', String(isHintActive));
     }
     this._updateSlotStates();
   }
@@ -550,7 +554,7 @@ export class HotTubGame {
     if (res.autoWatermarkTriggered) {
       soundEngine.playHintWhisper();
       this._activateWatermark();
-      this._showMascotMessage('Here is a gentle hint in the slots!', 2400);
+      this._showMascotMessage('Here is a gentle hint for this letter!', 2400);
     }
   }
 
