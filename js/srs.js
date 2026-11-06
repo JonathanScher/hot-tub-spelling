@@ -24,6 +24,7 @@ export const PROFILE_STATS_STORAGE_PREFIX = 'hottub_srs_profile_stats_v1_';
  * @property {string} name
  * @property {boolean} isTest
  * @property {string} avatar
+ * @property {Record<string, number>} [trapHistory]
  */
 
 /**
@@ -37,8 +38,8 @@ export const PROFILE_STATS_STORAGE_PREFIX = 'hottub_srs_profile_stats_v1_';
 
 /** @type {LearnerProfile[]} */
 export const DEFAULT_PROFILES = [
-  { id: 'daughter', name: 'Zoé', isTest: false, avatar: '👧' },
-  { id: 'test', name: 'Test / Sandbox', isTest: true, avatar: '🧪' }
+  { id: 'daughter', name: 'Zoé', isTest: false, avatar: '👧', trapHistory: {} },
+  { id: 'test', name: 'Test / Sandbox', isTest: true, avatar: '🧪', trapHistory: {} }
 ];
 
 /**
@@ -73,7 +74,8 @@ export function getProfiles(customStorage) {
             id,
             name,
             isTest: Boolean(p.isTest),
-            avatar: String(p.avatar || (p.isTest ? '🧪' : '👧'))
+            avatar: String(p.avatar || (p.isTest ? '🧪' : '👧')),
+            trapHistory: p.trapHistory && typeof p.trapHistory === 'object' ? { ...p.trapHistory } : {}
           };
         });
       }
@@ -81,7 +83,10 @@ export function getProfiles(customStorage) {
   } catch {
     // Fall back to defaults on parse error
   }
-  return [...DEFAULT_PROFILES];
+  return DEFAULT_PROFILES.map((p) => ({
+    ...p,
+    trapHistory: { ...(p.trapHistory || {}) }
+  }));
 }
 
 /**
@@ -207,6 +212,18 @@ export function resetProfileProgress(profileId, customStorage, todayIso) {
   const today = todayIso || getLocalISODate();
   const cleanId = String(profileId || '').trim();
 
+  // Reset trapHistory in profile metadata as well
+  const profiles = getProfiles(store);
+  const targetProf = profiles.find((p) => p.id === cleanId);
+  if (targetProf) {
+    targetProf.trapHistory = {};
+    try {
+      store.setItem(PROFILES_METADATA_KEY, JSON.stringify(profiles));
+    } catch {
+      // Ignore
+    }
+  }
+
   if (cleanId === 'test') {
     if (typeof store.removeItem === 'function') {
       store.removeItem(PROFILE_STATS_STORAGE_PREFIX + 'test');
@@ -236,6 +253,154 @@ export function resetProfileProgress(profileId, customStorage, todayIso) {
     store.setItem(PROFILE_STATS_STORAGE_PREFIX + cleanId, JSON.stringify({}));
   }
   return loadWords(store, today, cleanId);
+}
+
+/**
+ * Normalizes a rule category name to canonical format.
+ * @param {string} cat
+ * @returns {string}
+ */
+export function normalizeCategoryName(cat) {
+  const s = String(cat || '').toLowerCase().trim();
+  if (s === 'silent finals' || s === 'silent_finals' || s === 'silentfinals' || s === 'silent-finals') {
+    return 'silent finals';
+  }
+  if (s === 'b/d/p/q flips' || s === 'bd_flips' || s === 'bdflips' || s === 'visual_flips' || s === 'b/d/p/q' || s === 'bdpq_flips') {
+    return 'b/d/p/q flips';
+  }
+  if (s === 'nasal vowels' || s === 'nasal_vowels' || s === 'nasalvowels' || s === 'nasal n/m' || s === 'nasal') {
+    return 'nasal vowels';
+  }
+  if (s === 'accents' || s === 'accent') {
+    return 'accents';
+  }
+  return s;
+}
+
+/**
+ * Retrieves the trap history error counts map for a profile.
+ * @param {string} [profileId]
+ * @param {StorageLike} [customStorage]
+ * @returns {Record<string, number>}
+ */
+export function getProfileTrapHistory(profileId, customStorage) {
+  const store = getStorage(customStorage);
+  const resolvedId = profileId || getActiveProfileId(store);
+  const profiles = getProfiles(store);
+  const prof = profiles.find((p) => p.id === resolvedId);
+  return prof && prof.trapHistory && typeof prof.trapHistory === 'object'
+    ? { ...prof.trapHistory }
+    : {};
+}
+
+/**
+ * Records a trap error for a specific rule category in a profile's trapHistory.
+ * Supports:
+ *   recordTrapError(category, { profileId, storage })
+ *   recordTrapError(category, profileId, storage)
+ *   recordTrapError(profileId, category, storage)
+ *   recordTrapError(category) -> defaults to activeProfileId
+ *
+ * @param {string} categoryOrProfileId
+ * @param {any} [profileIdOrCategoryOrOptions]
+ * @param {StorageLike} [customStorage]
+ * @returns {Record<string, number>}
+ */
+export function recordTrapError(categoryOrProfileId, profileIdOrCategoryOrOptions, customStorage) {
+  let category = '';
+  let profileId = '';
+  let storage = customStorage;
+
+  if (typeof categoryOrProfileId === 'string' && (categoryOrProfileId === 'daughter' || categoryOrProfileId === 'test')) {
+    profileId = categoryOrProfileId;
+    category = String(profileIdOrCategoryOrOptions || '');
+  } else {
+    category = String(categoryOrProfileId || '');
+    if (typeof profileIdOrCategoryOrOptions === 'string') {
+      profileId = profileIdOrCategoryOrOptions;
+    } else if (profileIdOrCategoryOrOptions && typeof profileIdOrCategoryOrOptions === 'object') {
+      profileId = profileIdOrCategoryOrOptions.profileId || '';
+      if (profileIdOrCategoryOrOptions.storage) {
+        storage = profileIdOrCategoryOrOptions.storage;
+      }
+    }
+  }
+
+  const store = getStorage(storage);
+  const resolvedProfileId = profileId || getActiveProfileId(store);
+  const profiles = getProfiles(store);
+  const prof = profiles.find((p) => p.id === resolvedProfileId);
+  if (!prof) return {};
+
+  if (!prof.trapHistory || typeof prof.trapHistory !== 'object') {
+    prof.trapHistory = {};
+  }
+
+  const rawCat = String(category || '').trim();
+  const canonical = normalizeCategoryName(rawCat);
+  const currentCount = prof.trapHistory[rawCat] || prof.trapHistory[canonical] || 0;
+  const newCount = currentCount + 1;
+
+  prof.trapHistory[rawCat] = newCount;
+  prof.trapHistory[canonical] = newCount;
+  // Also provide snake_case alias
+  const snakeAlias = canonical.replace(/\s+/g, '_').replace(/[\/]/g, '');
+  prof.trapHistory[snakeAlias] = newCount;
+
+  try {
+    store.setItem(PROFILES_METADATA_KEY, JSON.stringify(profiles));
+  } catch (err) {
+    console.warn('Failed to persist profile trapHistory:', err);
+  }
+
+  return { ...prof.trapHistory };
+}
+
+/**
+ * Classifies a wrong tap error into a rule category.
+ * @param {string} targetChar
+ * @param {string} tappedChar
+ * @param {string} [currentWord='']
+ * @param {number} [currentIndex=-1]
+ * @returns {string | null}
+ */
+export function classifyTrapError(targetChar, tappedChar, currentWord = '', currentIndex = -1) {
+  const req = String(targetChar || '').toLowerCase();
+  const tapped = String(tappedChar || '').toLowerCase();
+  if (!req || !tapped || req === tapped) return null;
+
+  const baseReq = req.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const baseTapped = tapped.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  // 1. Accents: same base letter with different accent (e.g. e vs é, c vs ç)
+  if (baseReq === baseTapped && req !== tapped) {
+    return 'accents';
+  }
+  if ((req === 'ç' && tapped === 'c') || (req === 'c' && tapped === 'ç')) {
+    return 'accents';
+  }
+
+  // 2. b/d/p/q flips
+  const bdSet = new Set(['b', 'd', 'p', 'q']);
+  if (bdSet.has(req) && bdSet.has(tapped)) {
+    return 'b/d/p/q flips';
+  }
+
+  // 3. Nasal vowels / n <-> m confusion
+  if ((req === 'n' && tapped === 'm') || (req === 'm' && tapped === 'n')) {
+    return 'nasal vowels';
+  }
+
+  // 4. Silent final consonants
+  const chars = Array.from(String(currentWord || '').trim().toLowerCase());
+  const idx = typeof currentIndex === 'number' ? currentIndex : -1;
+  const isFinalChar = idx >= 0 && idx === chars.length - 1;
+  const silentFinalTraps = new Set(['t', 'd', 's', 'x', 'p', 'g', 'c', 'z', 'e']);
+  if (isFinalChar && isFrenchConsonant(req) && silentFinalTraps.has(tapped)) {
+    return 'silent finals';
+  }
+
+  return null;
 }
 
 /**
@@ -1208,14 +1373,23 @@ function addDistractorTrap(pool, ch, count, vocabHasAccents, req) {
  * Builds a weighted list of plausible lowercase distractor characters for smart bubble spawning.
  * Includes accented variants ONLY if the word list (or current word) uses accented characters,
  * and strictly excludes `requiredChar` so distractors never match `targetWord[currentIndex]`.
+ * Supports dynamic category weighting according to personal profile error history (trapHistory)
+ * and strictly caps any single category at 50% of the total distractor pool.
  *
  * @param {string} requiredChar
  * @param {string} currentWord
  * @param {Array<string | { word?: string }>} [allWords=[]]
  * @param {number} [targetIndex=-1]
+ * @param {any} [profileOrTrapHistory=null]
  * @returns {string[]}
  */
-export function getPlausibleDistractors(requiredChar, currentWord, allWords = [], targetIndex = -1) {
+export function getPlausibleDistractors(
+  requiredChar,
+  currentWord,
+  allWords = [],
+  targetIndex = -1,
+  profileOrTrapHistory = null
+) {
   const req = String(requiredChar || '').toLowerCase();
   const vocabChars = new Set();
   let vocabHasAccents = false;
@@ -1240,8 +1414,60 @@ export function getPlausibleDistractors(requiredChar, currentWord, allWords = []
     }
   }
 
-  /** @type {string[]} */
-  const pool = [];
+  // Resolve personal profile trapHistory
+  let trapHistory = null;
+  if (profileOrTrapHistory) {
+    if (typeof profileOrTrapHistory === 'object') {
+      if (profileOrTrapHistory.trapHistory && typeof profileOrTrapHistory.trapHistory === 'object') {
+        trapHistory = profileOrTrapHistory.trapHistory;
+      } else {
+        trapHistory = profileOrTrapHistory;
+      }
+    } else if (typeof profileOrTrapHistory === 'string') {
+      trapHistory = getProfileTrapHistory(profileOrTrapHistory);
+    }
+  }
+
+  const getCatErrors = (cat) => {
+    if (!trapHistory || typeof trapHistory !== 'object') return 0;
+    const targetNorm = normalizeCategoryName(cat);
+    for (const [k, v] of Object.entries(trapHistory)) {
+      if (normalizeCategoryName(k) === targetNorm) {
+        const n = Number(v);
+        return Number.isFinite(n) && n > 0 ? n : 0;
+      }
+    }
+    return 0;
+  };
+
+  const silentErrors = getCatErrors('silent finals');
+  const bdErrors = getCatErrors('b/d/p/q flips');
+  const nasalErrors = getCatErrors('nasal vowels');
+  const accentErrors = getCatErrors('accents');
+  const totalTrackedErrors = silentErrors + bdErrors + nasalErrors + accentErrors;
+
+  const getWeightMultiplier = (errors) => {
+    if (totalTrackedErrors === 0) return 1.0;
+    if (errors === 0) return 0.5;
+    const ratio = errors / totalTrackedErrors;
+    return Math.max(1.5, 1.0 + ratio * 3.5);
+  };
+
+  const silentMult = getWeightMultiplier(silentErrors);
+  const bdMult = getWeightMultiplier(bdErrors);
+  const nasalMult = getWeightMultiplier(nasalErrors);
+  const accentMult = getWeightMultiplier(accentErrors);
+
+  /** @type {Array<{ char: string, category: string }>} */
+  const taggedPool = [];
+
+  function addTagged(ch, count, category) {
+    if (!ch || ch === req) return;
+    if (ch.charCodeAt(0) > 127 && !vocabHasAccents) return;
+    for (let i = 0; i < count; i++) {
+      taggedPool.push({ char: ch, category });
+    }
+  }
 
   const chars = Array.from(String(currentWord || '').trim().toLowerCase());
   const idx = typeof targetIndex === 'number' ? targetIndex : -1;
@@ -1255,10 +1481,11 @@ export function getPlausibleDistractors(requiredChar, currentWord, allWords = []
     const isAfterVowel = prevChar && isFrenchVowel(prevChar);
     const isBeforeMBP = nextChar === 'm' || nextChar === 'b' || nextChar === 'p';
     if (isAfterVowel || isBeforeMBP) {
+      const nasalCount = Math.max(2, Math.round(7 * nasalMult));
       if (req === 'm') {
-        addDistractorTrap(pool, 'n', 7, vocabHasAccents, req);
+        addTagged('n', nasalCount, 'nasal vowels');
       } else {
-        addDistractorTrap(pool, 'm', 7, vocabHasAccents, req);
+        addTagged('m', nasalCount, 'nasal vowels');
       }
     }
   }
@@ -1266,148 +1493,161 @@ export function getPlausibleDistractors(requiredChar, currentWord, allWords = []
   // 2. Double Consonant Trap (L[i] === L[i-1])
   if (idx > 0 && prevChar === req) {
     if (nextChar) {
-      addDistractorTrap(pool, nextChar, 7, vocabHasAccents, req);
+      addTagged(nextChar, 7, 'double consonants');
     }
   }
 
   // 3. Silent Final Consonants (i === chars.length - 1)
   if (idx === chars.length - 1 && isFrenchConsonant(req)) {
     const finalSilentTraps = ['t', 'd', 's', 'x', 'p', 'g', 'c', 'z', 'e'];
+    const silentCount = Math.max(2, Math.round(5 * silentMult));
     for (const trap of finalSilentTraps) {
-      addDistractorTrap(pool, trap, 5, vocabHasAccents, req);
+      addTagged(trap, silentCount, 'silent finals');
     }
   }
 
   // 4. Phoneme-Grapheme Matrix (CPG Auditory Traps)
   // 4.1 [s] and [z] traps
   if (req === 'c') {
-    addDistractorTrap(pool, 's', 6, vocabHasAccents, req);
-    addDistractorTrap(pool, 'z', 4, vocabHasAccents, req);
+    addTagged('s', 6, 'phonemes');
+    addTagged('z', 4, 'phonemes');
     if (vocabHasAccents) {
-      addDistractorTrap(pool, 'ç', 5, vocabHasAccents, req);
+      const accCount = Math.max(2, Math.round(5 * accentMult));
+      addTagged('ç', accCount, 'accents');
     }
   } else if (req === 'ç') {
-    addDistractorTrap(pool, 'c', 6, vocabHasAccents, req);
-    addDistractorTrap(pool, 's', 6, vocabHasAccents, req);
+    const accCount = Math.max(2, Math.round(6 * accentMult));
+    addTagged('c', accCount, 'accents');
+    addTagged('s', 6, 'phonemes');
   } else if (req === 's') {
-    addDistractorTrap(pool, 'c', 5, vocabHasAccents, req);
+    addTagged('c', 5, 'phonemes');
     if (vocabHasAccents) {
-      addDistractorTrap(pool, 'ç', 5, vocabHasAccents, req);
+      const accCount = Math.max(2, Math.round(5 * accentMult));
+      addTagged('ç', accCount, 'accents');
     }
     if (prevChar && isFrenchVowel(prevChar) && nextChar && isFrenchVowel(nextChar)) {
-      addDistractorTrap(pool, 'z', 6, vocabHasAccents, req);
-      addDistractorTrap(pool, 'c', 6, vocabHasAccents, req);
+      addTagged('z', 6, 'phonemes');
+      addTagged('c', 6, 'phonemes');
     } else {
-      addDistractorTrap(pool, 'z', 4, vocabHasAccents, req);
+      addTagged('z', 4, 'phonemes');
     }
   } else if (req === 'z') {
-    addDistractorTrap(pool, 's', 6, vocabHasAccents, req);
-    addDistractorTrap(pool, 'c', 5, vocabHasAccents, req);
+    addTagged('s', 6, 'phonemes');
+    addTagged('c', 5, 'phonemes');
   }
 
   // 4.2 [k] and mandatory 'u' after 'q'
   if (req === 'q') {
-    addDistractorTrap(pool, 'c', 6, vocabHasAccents, req);
-    addDistractorTrap(pool, 'k', 6, vocabHasAccents, req);
+    addTagged('c', 6, 'phonemes');
+    addTagged('k', 6, 'phonemes');
   } else if (req === 'k') {
-    addDistractorTrap(pool, 'c', 6, vocabHasAccents, req);
-    addDistractorTrap(pool, 'q', 6, vocabHasAccents, req);
+    addTagged('c', 6, 'phonemes');
+    addTagged('q', 6, 'phonemes');
   } else if (req === 'c' && (!nextChar || nextChar === 'a' || nextChar === 'o' || nextChar === 'u' || isFrenchConsonant(nextChar))) {
-    addDistractorTrap(pool, 'q', 5, vocabHasAccents, req);
-    addDistractorTrap(pool, 'k', 5, vocabHasAccents, req);
+    addTagged('q', 5, 'phonemes');
+    addTagged('k', 5, 'phonemes');
   }
 
   if (req === 'u' && prevChar === 'q') {
     if (nextChar) {
-      addDistractorTrap(pool, nextChar, 14, vocabHasAccents, req);
+      addTagged(nextChar, 14, 'phonemes');
     }
   }
 
   // 4.3 [ʒ] traps & euphonious 'e' after 'g'
   if (req === 'g') {
-    addDistractorTrap(pool, 'j', 6, vocabHasAccents, req);
+    addTagged('j', 6, 'phonemes');
   } else if (req === 'j') {
-    addDistractorTrap(pool, 'g', 6, vocabHasAccents, req);
+    addTagged('g', 6, 'phonemes');
   }
 
   if (req === 'e' && prevChar === 'g' && (nextChar === 'a' || nextChar === 'o' || nextChar === 'u')) {
-    addDistractorTrap(pool, nextChar, 6, vocabHasAccents, req);
-    addDistractorTrap(pool, 'j', 6, vocabHasAccents, req);
+    addTagged(nextChar, 6, 'phonemes');
+    addTagged('j', 6, 'phonemes');
   }
 
   // 4.4 Mandatory 'u' omission after 'g' (e.g. guêpe)
   if (req === 'u' && prevChar === 'g') {
     if (nextChar) {
-      addDistractorTrap(pool, nextChar, 6, vocabHasAccents, req);
+      addTagged(nextChar, 6, 'phonemes');
     }
-    addDistractorTrap(pool, 'e', 6, vocabHasAccents, req);
+    addTagged('e', 6, 'phonemes');
     if (vocabHasAccents) {
-      addDistractorTrap(pool, 'ê', 6, vocabHasAccents, req);
-      addDistractorTrap(pool, 'é', 5, vocabHasAccents, req);
+      const accCount = Math.max(2, Math.round(6 * accentMult));
+      addTagged('ê', accCount, 'accents');
+      addTagged('é', Math.max(2, Math.round(5 * accentMult)), 'accents');
     }
   }
 
   // 4.5 [o] traps (eau, au)
   if (req === 'e' && nextChar === 'a' && nextNextChar === 'u') {
-    addDistractorTrap(pool, 'o', 6, vocabHasAccents, req);
-    addDistractorTrap(pool, 'a', 6, vocabHasAccents, req);
+    addTagged('o', 6, 'phonemes');
+    addTagged('a', 6, 'phonemes');
     if (vocabHasAccents) {
-      addDistractorTrap(pool, 'ô', 5, vocabHasAccents, req);
+      addTagged('ô', Math.max(2, Math.round(5 * accentMult)), 'accents');
     }
   }
   if (req === 'a' && nextChar === 'u') {
-    addDistractorTrap(pool, 'o', 6, vocabHasAccents, req);
-    addDistractorTrap(pool, 'e', 6, vocabHasAccents, req);
+    addTagged('o', 6, 'phonemes');
+    addTagged('e', 6, 'phonemes');
     if (vocabHasAccents) {
-      addDistractorTrap(pool, 'ô', 5, vocabHasAccents, req);
+      addTagged('ô', Math.max(2, Math.round(5 * accentMult)), 'accents');
     }
   }
 
   // 4.6 [f] traps (f vs p from ph, and voiced v)
   if (req === 'f') {
-    addDistractorTrap(pool, 'p', 5, vocabHasAccents, req);
-    addDistractorTrap(pool, 'v', 5, vocabHasAccents, req);
+    addTagged('p', 5, 'phonemes');
+    addTagged('v', 5, 'phonemes');
   } else if (req === 'p' && nextChar === 'h') {
-    addDistractorTrap(pool, 'f', 6, vocabHasAccents, req);
+    addTagged('f', 6, 'phonemes');
   }
 
   // 4.7 [e] / [ɛ] variants
   if (baseKey === 'e' && vocabHasAccents) {
     const eVariants = ['e', 'é', 'è', 'ê', 'a'];
+    const accCount = Math.max(2, Math.round(6 * accentMult));
     for (const v of eVariants) {
-      addDistractorTrap(pool, v, 6, vocabHasAccents, req);
+      addTagged(v, accCount, 'accents');
     }
   }
 
   // 5. Silent H (index 0)
   if (idx === 0) {
     if (req === 'h' && nextChar) {
-      addDistractorTrap(pool, nextChar, 7, vocabHasAccents, req);
+      addTagged(nextChar, 7, 'silent h');
     } else if (isFrenchVowel(req)) {
-      addDistractorTrap(pool, 'h', 5, vocabHasAccents, req);
+      addTagged('h', 5, 'silent h');
     }
   }
 
   // 6. Plausible Neighbor Letters (Minimal Pairs & Visual Symmetries)
   const neighbors = PLAUSIBLE_LETTER_NEIGHBORS[baseKey] || ['a', 'e', 'i', 'o', 's', 't', 'n', 'r'];
+  const bdChars = new Set(['b', 'd', 'p', 'q']);
   for (const n of neighbors) {
     if (n !== req) {
-      pool.push(n, n, n, n);
+      if (bdChars.has(baseKey) && bdChars.has(n)) {
+        const count = Math.max(1, Math.round(4 * bdMult));
+        addTagged(n, count, 'b/d/p/q flips');
+      } else {
+        addTagged(n, 4, 'neighbors');
+      }
     }
   }
 
   // 7. Accented Families & Vocab Accents
   if (vocabHasAccents) {
     if (ACCENT_FAMILIES[baseKey]) {
+      const accCount = Math.max(1, Math.round(3 * accentMult));
       for (const variant of ACCENT_FAMILIES[baseKey]) {
         if (variant !== req) {
-          pool.push(variant, variant, variant);
+          addTagged(variant, accCount, 'accents');
         }
       }
     }
     for (const ch of vocabChars) {
       if (ch.charCodeAt(0) > 127 && ch !== req) {
-        pool.push(ch, ch);
+        addTagged(ch, 2, 'accents');
       }
     }
   }
@@ -1415,11 +1655,90 @@ export function getPlausibleDistractors(requiredChar, currentWord, allWords = []
   // 8. General Lowercase Alphabet
   for (const letter of BASE_LOWERCASE_ALPHABET) {
     if (letter !== req) {
-      pool.push(letter);
+      addTagged(letter, 1, 'alphabet');
     }
   }
 
-  return pool.filter((ch) => ch !== req);
+  // Strict Capping: Cap any single category at 50% of the distractor pool
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const catCounts = new Map();
+    for (const item of taggedPool) {
+      catCounts.set(item.category, (catCounts.get(item.category) || 0) + 1);
+    }
+
+    const total = taggedPool.length;
+    for (const [cat, count] of catCounts.entries()) {
+      const otherCount = total - count;
+      const maxAllowed = Math.max(1, otherCount);
+      if (count > maxAllowed) {
+        const indices = [];
+        for (let i = 0; i < taggedPool.length; i++) {
+          if (taggedPool[i].category === cat) {
+            indices.push(i);
+          }
+        }
+
+        const byChar = new Map();
+        for (const i of indices) {
+          const ch = taggedPool[i].char;
+          if (!byChar.has(ch)) byChar.set(ch, []);
+          byChar.get(ch).push(i);
+        }
+
+        const distinctChars = Array.from(byChar.keys());
+        const targetPerChar = Math.floor(maxAllowed / distinctChars.length);
+        const remainder = maxAllowed % distinctChars.length;
+        const toKeepIndices = new Set();
+        distinctChars.forEach((ch, idx) => {
+          const charIndices = byChar.get(ch);
+          const keepNum = Math.max(1, targetPerChar + (idx < remainder ? 1 : 0));
+          charIndices.slice(0, keepNum).forEach((id) => toKeepIndices.add(id));
+        });
+
+        if (toKeepIndices.size > maxAllowed) {
+          const arr = Array.from(toKeepIndices);
+          while (arr.length > maxAllowed) {
+            toKeepIndices.delete(arr.pop());
+          }
+        }
+
+        const filtered = [];
+        for (let i = 0; i < taggedPool.length; i++) {
+          if (taggedPool[i].category !== cat || toKeepIndices.has(i)) {
+            filtered.push(taggedPool[i]);
+          }
+        }
+        taggedPool.length = 0;
+        taggedPool.push(...filtered);
+        changed = true;
+        break;
+      }
+    }
+  }
+
+  const pool = taggedPool.map((item) => item.char);
+
+  const categoryCounts = {};
+  for (const item of taggedPool) {
+    categoryCounts[item.category] = (categoryCounts[item.category] || 0) + 1;
+    const norm = normalizeCategoryName(item.category);
+    if (norm !== item.category) {
+      categoryCounts[norm] = categoryCounts[item.category];
+    }
+    const snakeAlias = norm.replace(/\s+/g, '_').replace(/[\/]/g, '');
+    categoryCounts[snakeAlias] = categoryCounts[item.category];
+  }
+
+  Object.defineProperty(pool, 'categoryCounts', {
+    value: categoryCounts,
+    writable: true,
+    enumerable: false,
+    configurable: true
+  });
+
+  return pool;
 }
 
 /**

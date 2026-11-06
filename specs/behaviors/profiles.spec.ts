@@ -15,6 +15,8 @@ import {
   resetProfileProgress,
   getProfileStatsSummary,
   mergeWordsFromCloud,
+  recordTrapError,
+  getProfileTrapHistory,
   DEFAULT_PROFILES,
   type StorageLike
 } from '../../js/srs.js';
@@ -54,13 +56,15 @@ describe('Learner Profiles & Test Isolation (js/srs.js)', () => {
         id: 'daughter',
         name: 'Zoé',
         isTest: false,
-        avatar: '👧'
+        avatar: '👧',
+        trapHistory: {}
       });
       expect(profiles[1]).toEqual({
         id: 'test',
         name: 'Test / Sandbox',
         isTest: true,
-        avatar: '🧪'
+        avatar: '🧪',
+        trapHistory: {}
       });
       expect(activeId).toBe('daughter');
       expect(activeProfile.id).toBe('daughter');
@@ -274,6 +278,51 @@ describe('Learner Profiles & Test Isolation (js/srs.js)', () => {
       const testCalin = testWords.find((w) => w.word === 'câlin')!;
       expect(testCalin.box).toBe(2);
       expect(testCalin.next_review).toBe('2026-11-03');
+    });
+  });
+
+  describe('Profile Trap History & Error Tracking (Issue #7)', () => {
+    it('initializes each profile with an empty trapHistory object', () => {
+      const storage = createIsolatedStorage();
+      const profiles = getProfiles(storage);
+      expect(profiles[0].trapHistory).toEqual({});
+      expect(profiles[1].trapHistory).toEqual({});
+    });
+
+    it('records trap errors per rule category into the profile trapHistory', () => {
+      const storage = createIsolatedStorage();
+      expect(getProfileTrapHistory('daughter', storage)).toEqual({});
+
+      recordTrapError('silent finals', { profileId: 'daughter', storage });
+      recordTrapError('silent finals', { profileId: 'daughter', storage });
+      recordTrapError('accents', { profileId: 'daughter', storage });
+
+      const history = getProfileTrapHistory('daughter', storage);
+      expect(history['silent finals'] || history['silent_finals']).toBe(2);
+      expect(history['accents']).toBe(1);
+    });
+
+    it('keeps trapHistory isolated between profiles', () => {
+      const storage = createIsolatedStorage();
+      recordTrapError('bd_flips', { profileId: 'daughter', storage });
+
+      const daughterHistory = getProfileTrapHistory('daughter', storage);
+      const testHistory = getProfileTrapHistory('test', storage);
+
+      expect(daughterHistory['bd_flips'] || daughterHistory['b/d/p/q flips']).toBe(1);
+      expect(testHistory['bd_flips'] || testHistory['b/d/p/q flips']).toBeUndefined();
+    });
+
+    it('resets trapHistory when profile progress is reset', () => {
+      const storage = createIsolatedStorage();
+      recordTrapError('accents', { profileId: 'daughter', storage });
+      recordTrapError('accents', { profileId: 'test', storage });
+
+      resetProfileProgress('daughter', storage);
+
+      expect(getProfileTrapHistory('daughter', storage)).toEqual({});
+      const testHistory = getProfileTrapHistory('test', storage);
+      expect(testHistory['accents']).toBe(1);
     });
   });
 });
