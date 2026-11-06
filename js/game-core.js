@@ -89,6 +89,7 @@ export const CHEER_MESSAGES_PRACTICE = [
  * @property {number} wordErrorCount
  * @property {number} letterErrorCount
  * @property {boolean} watermarkActive
+ * @property {boolean} fullWordWatermark
  * @property {boolean} wordTransitioning
  * @property {boolean} running
  * @property {boolean} paused
@@ -171,6 +172,7 @@ export function cloneGameState(state) {
     wordErrorCount: state.wordErrorCount,
     letterErrorCount: state.letterErrorCount,
     watermarkActive: state.watermarkActive,
+    fullWordWatermark: Boolean(state.fullWordWatermark),
     wordTransitioning: state.wordTransitioning,
     running: state.running,
     paused: state.paused,
@@ -237,6 +239,7 @@ export function createGameState(config = {}) {
     wordErrorCount: 0,
     letterErrorCount: 0,
     watermarkActive: false,
+    fullWordWatermark: false,
     wordTransitioning: false,
     running: false,
     paused: false,
@@ -510,6 +513,7 @@ export function startNextWordOnState(state) {
   state.wordErrorCount = 0;
   state.letterErrorCount = 0;
   state.watermarkActive = false;
+  state.fullWordWatermark = false;
   state.wordTransitioning = false;
   state.spawnCounter = 0;
   state.spawnTimer = 0;
@@ -525,6 +529,32 @@ export function startNextWordOnState(state) {
  * @param {GameState} state
  * @returns {SessionSummary}
  */
+/**
+ * Determines whether the faint watermark ghost letter is visible for a specific slot index.
+ * - Explicit Hint: reveals the watermark for all remaining unfilled slots (slotIndex >= currentIndex).
+ * - Automatic 2-error watermark: reveals the watermark ONLY for the current active index (slotIndex === currentIndex).
+ * - Filled slots (slotIndex < currentIndex) never show watermark.
+ *
+ * @param {GameState} state
+ * @param {number} slotIndex
+ * @returns {boolean}
+ */
+export function isSlotWatermarkVisible(state, slotIndex) {
+  if (!state || !state.running || state.wordTransitioning) {
+    return false;
+  }
+  if (slotIndex < state.currentIndex || slotIndex >= state.targetChars.length) {
+    return false;
+  }
+  if (state.fullWordWatermark) {
+    return true;
+  }
+  if (state.watermarkActive && slotIndex === state.currentIndex) {
+    return true;
+  }
+  return false;
+}
+
 export function finishSessionOnState(state) {
   state.running = false;
   state.bubbles = [];
@@ -548,8 +578,11 @@ export function useHintOnState(state) {
     return { activated: false, pulsed: false };
   }
 
-  if (!state.watermarkActive) {
-    state.wordErrorCount += 1;
+  if (!state.fullWordWatermark) {
+    if (!state.watermarkActive) {
+      state.wordErrorCount += 1;
+    }
+    state.fullWordWatermark = true;
     state.watermarkActive = true;
     return { activated: true, pulsed: false };
   } else {
@@ -599,6 +632,9 @@ export function handleBubbleTapOnState(state, bubbleOrId) {
 
     state.currentIndex += 1;
     state.letterErrorCount = 0;
+    if (!state.fullWordWatermark) {
+      state.watermarkActive = false;
+    }
 
     // Ensure next 3rd spawn cycle delivers the new required letter promptly if not already floating
     const nextRequired = state.targetChars[state.currentIndex];

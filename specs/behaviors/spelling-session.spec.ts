@@ -5,7 +5,8 @@ import {
   createGameState,
   stepGame,
   handleBubbleTapOnState,
-  spawnBubbleOnState
+  spawnBubbleOnState,
+  isSlotWatermarkVisible
 } from '../../js/game-core.js';
 
 describe('Sequential Spelling, Hint Scaffolding & Session Mastery (js/game-core.js)', () => {
@@ -112,6 +113,118 @@ describe('Sequential Spelling, Hint Scaffolding & Session Mastery (js/game-core.
       expect(state.letterErrorCount).toBe(2);
       expect(state.wordErrorCount).toBe(2);
     });
+
+    it('reveals watermark only for the current index on 2 errors and hides it again as soon as that bubble is popped', () => {
+      // GIVEN an active game state on word "printemps"
+      let state = createGameState({
+        sessionWords: [{ word: 'printemps' }],
+        seed: 88
+      });
+      expect(state.targetChars[0]).toBe('p');
+
+      // WHEN making 2 errors on index 0 ('p')
+      const wrongBubbles = state.bubbles.filter((b) => b.char !== 'p');
+      expect(wrongBubbles.length).toBeGreaterThanOrEqual(2);
+      state = stepGame(state, { type: 'TAP_BUBBLE', bubbleId: wrongBubbles[0].id });
+      state = stepGame(state, { type: 'TAP_BUBBLE', bubbleId: wrongBubbles[1].id });
+
+      // THEN watermark is active ONLY for current index 0, NOT for future unattempted letters
+      expect(state.watermarkActive).toBe(true);
+      expect(state.fullWordWatermark).toBe(false);
+      expect(isSlotWatermarkVisible(state, 0)).toBe(true);
+      for (let i = 1; i < state.targetChars.length; i++) {
+        expect(isSlotWatermarkVisible(state, i)).toBe(false);
+      }
+
+      // WHEN the current bubble 'p' is popped
+      let pBubble = state.bubbles.find((b) => b.state === 'floating' && b.char === 'p');
+      if (!pBubble) {
+        pBubble = spawnBubbleOnState(state);
+        pBubble.char = 'p';
+      }
+      state = stepGame(state, { type: 'TAP_BUBBLE', bubbleId: pBubble.id });
+
+      // THEN the watermark hides immediately: currentIndex is 1 ('r') and watermarkActive becomes false
+      expect(state.currentIndex).toBe(1);
+      expect(state.watermarkActive).toBe(false);
+      for (let i = 0; i < state.targetChars.length; i++) {
+        expect(isSlotWatermarkVisible(state, i)).toBe(false);
+      }
+    });
+
+    it('keeps full-word watermark visible across all remaining slots when USE_HINT is explicitly pressed', () => {
+      // GIVEN an active game state on word "printemps"
+      let state = createGameState({
+        sessionWords: [{ word: 'printemps' }],
+        seed: 42
+      });
+
+      // WHEN explicit hint is used
+      state = stepGame(state, { type: 'USE_HINT' });
+
+      // THEN full-word watermark is active for all slots 0..8
+      expect(state.watermarkActive).toBe(true);
+      expect(state.fullWordWatermark).toBe(true);
+      for (let i = 0; i < state.targetChars.length; i++) {
+        expect(isSlotWatermarkVisible(state, i)).toBe(true);
+      }
+
+      // WHEN index 0 ('p') is popped
+      let pBubble = state.bubbles.find((b) => b.state === 'floating' && b.char === 'p');
+      if (!pBubble) {
+        pBubble = spawnBubbleOnState(state);
+        pBubble.char = 'p';
+      }
+      state = stepGame(state, { type: 'TAP_BUBBLE', bubbleId: pBubble.id });
+
+      // THEN full-word watermark REMAINS active for all remaining slots (1..8)
+      expect(state.currentIndex).toBe(1);
+      expect(state.watermarkActive).toBe(true);
+      expect(state.fullWordWatermark).toBe(true);
+      expect(isSlotWatermarkVisible(state, 0)).toBe(false); // already filled
+      for (let i = 1; i < state.targetChars.length; i++) {
+        expect(isSlotWatermarkVisible(state, i)).toBe(true);
+      }
+    });
+
+    it('upgrades slot-specific auto-watermark to full-word watermark when USE_HINT is explicitly pressed', () => {
+      // GIVEN 2 errors on index 0 of "sans"
+      let state = createGameState({
+        sessionWords: [{ word: 'sans' }],
+        seed: 88
+      });
+      const wrongBubbles = state.bubbles.filter((b) => b.char !== 's');
+      state = stepGame(state, { type: 'TAP_BUBBLE', bubbleId: wrongBubbles[0].id });
+      state = stepGame(state, { type: 'TAP_BUBBLE', bubbleId: wrongBubbles[1].id });
+      expect(state.watermarkActive).toBe(true);
+      expect(state.fullWordWatermark).toBe(false);
+      expect(isSlotWatermarkVisible(state, 0)).toBe(true);
+      expect(isSlotWatermarkVisible(state, 1)).toBe(false);
+
+      // WHEN player explicitly asks for help via USE_HINT
+      state = stepGame(state, { type: 'USE_HINT' });
+
+      // THEN full-word watermark is now active across all remaining slots
+      expect(state.fullWordWatermark).toBe(true);
+      expect(state.watermarkActive).toBe(true);
+      expect(isSlotWatermarkVisible(state, 0)).toBe(true);
+      expect(isSlotWatermarkVisible(state, 1)).toBe(true);
+      expect(isSlotWatermarkVisible(state, 2)).toBe(true);
+      expect(isSlotWatermarkVisible(state, 3)).toBe(true);
+
+      // AND popping index 0 keeps watermark active for remaining slots
+      let sBubble = state.bubbles.find((b) => b.state === 'floating' && b.char === 's');
+      if (!sBubble) {
+        sBubble = spawnBubbleOnState(state);
+        sBubble.char = 's';
+      }
+      state = stepGame(state, { type: 'TAP_BUBBLE', bubbleId: sBubble.id });
+      expect(state.currentIndex).toBe(1);
+      expect(state.watermarkActive).toBe(true);
+      expect(state.fullWordWatermark).toBe(true);
+      expect(isSlotWatermarkVisible(state, 1)).toBe(true);
+    });
+
   });
 
   describe('Word Completion, Zero-Error Mastery, In-Session Retry & Session Summary', () => {
