@@ -48,6 +48,8 @@ export const CHEER_MESSAGES_PRACTICE = [
  * @property {number} [correct_attempts]
  * @property {string} [custom_audio_url]
  * @property {boolean} isRetry
+ * @property {number} [retryCount]
+ * @property {number[]} [firstTryCorrectIndices]
  */
 
 /**
@@ -102,6 +104,8 @@ export const CHEER_MESSAGES_PRACTICE = [
  * @property {boolean} wordTransitioning
  * @property {boolean} running
  * @property {boolean} paused
+ * @property {number[]} prefilledIndices
+ * @property {Set<number>} letterErrorsThisRound
  * @property {BubbleEntity[]} bubbles
  * @property {number} nextBubbleId
  * @property {number} spawnCounter
@@ -146,6 +150,22 @@ export const CHEER_MESSAGES_PRACTICE = [
  * @param {number} [seed=1]
  * @returns {import('./prng.js').SeededPRNG}
  */
+/**
+ * Finds the next character index that is NOT in `prefilledIndices`.
+ * @param {string[]} targetChars
+ * @param {number[]} [prefilledIndices=[]]
+ * @param {number} [fromIndex=0]
+ * @returns {number}
+ */
+export function getNextUnfilledIndex(targetChars, prefilledIndices = [], fromIndex = 0) {
+  const prefilledSet = new Set(prefilledIndices);
+  let idx = fromIndex;
+  while (idx < targetChars.length && prefilledSet.has(idx)) {
+    idx++;
+  }
+  return idx;
+}
+
 export function ensureSeededPRNG(prngOrUndefined, seed = 1) {
   if (typeof prngOrUndefined === 'function') {
     if ('clone' in prngOrUndefined && typeof prngOrUndefined.clone === 'function') {
@@ -171,12 +191,26 @@ export function ensureSeededPRNG(prngOrUndefined, seed = 1) {
 export function cloneGameState(state) {
   return {
     allVocabWords: state.allVocabWords.map((w) => (w && typeof w === 'object' ? { ...w } : w)),
-    queue: state.queue.map((w) => ({ ...w })),
+    queue: state.queue.map((w) => {
+      const cloned = { ...w };
+      if (w.firstTryCorrectIndices) {
+        cloned.firstTryCorrectIndices = [...w.firstTryCorrectIndices];
+      }
+      return cloned;
+    }),
     totalUniqueWords: state.totalUniqueWords,
     masteredCount: state.masteredCount,
     firstAttemptRecorded: new Set(state.firstAttemptRecorded),
     sessionResults: state.sessionResults.map((r) => ({ ...r })),
-    currentWordObj: state.currentWordObj ? { ...state.currentWordObj } : null,
+    currentWordObj: state.currentWordObj
+      ? (() => {
+          const cloned = { ...state.currentWordObj };
+          if (state.currentWordObj.firstTryCorrectIndices) {
+            cloned.firstTryCorrectIndices = [...state.currentWordObj.firstTryCorrectIndices];
+          }
+          return cloned;
+        })()
+      : null,
     targetChars: [...state.targetChars],
     currentIndex: state.currentIndex,
     wordErrorCount: state.wordErrorCount,
@@ -188,6 +222,8 @@ export function cloneGameState(state) {
     wordTransitioning: state.wordTransitioning,
     running: state.running,
     paused: state.paused,
+    prefilledIndices: state.prefilledIndices ? [...state.prefilledIndices] : [],
+    letterErrorsThisRound: new Set(state.letterErrorsThisRound || []),
     bubbles: state.bubbles.map((b) => ({
       id: b.id,
       char: b.char,
@@ -258,6 +294,8 @@ export function createGameState(config = {}) {
     wordTransitioning: false,
     running: false,
     paused: false,
+    prefilledIndices: [],
+    letterErrorsThisRound: new Set(),
     bubbles: [],
     nextBubbleId: 1,
     spawnCounter: 0,
@@ -339,7 +377,10 @@ export function chooseNextBubbleCharOnState(state) {
   }
 
   // Rule 2: 30% of remaining bubbles are future letters from the current word
-  const futureChars = state.targetChars.slice(state.currentIndex + 1);
+  const prefilledSet = new Set(state.prefilledIndices || []);
+  const futureChars = state.targetChars.filter(
+    (_, idx) => idx > state.currentIndex && !prefilledSet.has(idx)
+  );
   if (futureChars.length > 0 && state.prng() < 0.30) {
     return futureChars[Math.floor(state.prng() * futureChars.length)];
   }
@@ -528,8 +569,11 @@ export function startSessionOnState(state, sessionWords, allVocabularyWords = se
     : safeSession.map((w) => (w && typeof w === 'object' ? { ...w } : w));
   state.queue = safeSession.map((w) => ({
     ...(typeof w === 'string' ? { word: w } : w),
-    isRetry: false
+    isRetry: false,
+    retryCount: 0
   }));
+  state.prefilledIndices = [];
+  state.letterErrorsThisRound = new Set();
   state.totalUniqueWords = state.queue.length;
   state.masteredCount = 0;
   state.firstAttemptRecorded.clear();
@@ -570,7 +614,6 @@ export function startNextWordOnState(state) {
   const nextWord = /** @type {SessionWordItem} */ (state.queue.shift());
   state.currentWordObj = nextWord;
   state.targetChars = Array.from(String(nextWord.word || '').trim().toLowerCase());
-  state.currentIndex = 0;
   state.wordErrorCount = 0;
   state.letterErrorCount = 0;
   state.watermarkActive = false;
@@ -581,10 +624,26 @@ export function startNextWordOnState(state) {
   state.spawnCounter = 0;
   state.spawnTimer = 0;
   state.targetSpawnIn = 1 + Math.floor(state.prng() * 3);
+  state.letterErrorsThisRound = new Set();
 
-  // CHARACTERIZATION NOTE: If a word in the queue normalizes to 0 characters (empty string),
-  // currentIndex (0) >= targetChars.length (0), so spawnInitialWaveOnState is a no-op.
-  spawnInitialWaveOnState(state);
+  const retryCount = nextWord.retryCount || 0;
+  if (retryCount === 2 && Array.isArray(nextWord.firstTryCorrectIndices)) {
+    let prefilled = nextWord.firstTryCorrectIndices.filter((idx) => idx < state.targetChars.length);
+    if (prefilled.length >= state.targetChars.length && state.targetChars.length > 0) {
+      prefilled = prefilled.slice(0, state.targetChars.length - 1);
+    }
+    state.prefilledIndices = prefilled;
+  } else {
+    state.prefilledIndices = [];
+  }
+
+  state.currentIndex = getNextUnfilledIndex(state.targetChars, state.prefilledIndices, 0);
+
+  if (state.currentIndex >= state.targetChars.length && state.targetChars.length > 0) {
+    state.wordTransitioning = true;
+  } else {
+    spawnInitialWaveOnState(state);
+  }
   return { finished: false, wordObj: nextWord };
 }
 
@@ -649,6 +708,9 @@ export function useHintOnState(state) {
     state.fullWordWatermark = true;
     state.watermarkActive = true;
     state.hintWatermarkUsed = true;
+    if (state.letterErrorsThisRound) {
+      state.letterErrorsThisRound.add(state.currentIndex);
+    }
     return { activated: true, pulsed: false };
   } else {
     return { activated: false, pulsed: true };
@@ -696,7 +758,11 @@ export function handleBubbleTapOnState(state, bubbleOrId) {
     const matchedSlotIndex = state.currentIndex;
     const matchedChar = bubble.char;
 
-    state.currentIndex += 1;
+    state.currentIndex = getNextUnfilledIndex(
+      state.targetChars,
+      state.prefilledIndices,
+      state.currentIndex + 1
+    );
     state.letterErrorCount = 0;
     if (!state.fullWordWatermark) {
       state.watermarkActive = false;
@@ -771,6 +837,9 @@ export function handleBubbleTapOnState(state, bubbleOrId) {
       targetChar,
       targetIndex: state.currentIndex
     });
+    if (state.letterErrorsThisRound) {
+      state.letterErrorsThisRound.add(state.currentIndex);
+    }
 
     let autoWatermarkTriggered = false;
     if (state.letterErrorCount >= 2 && !state.watermarkActive) {
@@ -832,6 +901,7 @@ export function recordWordCompletionOnState(state, options = {}) {
     }
   }
 
+  let firstTryCorrectIndices = state.currentWordObj.firstTryCorrectIndices;
   if (isFirstAttempt) {
     state.firstAttemptRecorded.add(wordStr);
     state.sessionResults.push({
@@ -839,15 +909,24 @@ export function recordWordCompletionOnState(state, options = {}) {
       firstAttemptErrors: errorsThisRound,
       masteredFirstTry: errorsThisRound === 0
     });
+    firstTryCorrectIndices = state.targetChars
+      .map((_, idx) => idx)
+      .filter((idx) => !state.letterErrorsThisRound?.has(idx));
+    state.currentWordObj.firstTryCorrectIndices = firstTryCorrectIndices;
   }
+
+  const currentRetryCount = state.currentWordObj.retryCount || 0;
 
   if (errorsThisRound === 0) {
     state.masteredCount += 1;
-  } else {
-    state.queue.push({
+  } else if (currentRetryCount < 2) {
+    const nextRetryItem = {
       ...state.currentWordObj,
-      isRetry: true
-    });
+      isRetry: true,
+      retryCount: currentRetryCount + 1,
+      firstTryCorrectIndices: firstTryCorrectIndices ? [...firstTryCorrectIndices] : []
+    };
+    state.queue.push(nextRetryItem);
   }
 
   const cheerList = errorsThisRound === 0 ? CHEER_MESSAGES_PERFECT : CHEER_MESSAGES_PRACTICE;
@@ -855,7 +934,38 @@ export function recordWordCompletionOnState(state, options = {}) {
   state.lastCheerMessage = cheerMessage;
 
   if (options.advanceImmediately !== false) {
-    startNextWordOnState(state);
+    if (state.queue.length === 0) {
+      finishSessionOnState(state);
+    } else if (state.queue.length > 1 || state.queue[0].word !== wordStr) {
+      startNextWordOnState(state);
+    } else {
+      const retryWord = state.queue[0];
+      state.currentWordObj = { ...retryWord };
+      state.targetChars = Array.from(String(retryWord.word || '').trim().toLowerCase());
+      state.wordErrorCount = 0;
+      state.letterErrorCount = 0;
+      state.watermarkActive = false;
+      state.hintWatermarkUsed = false;
+      state.wrongTapsOnWord = [];
+      state.fullWordWatermark = false;
+      state.wordTransitioning = false;
+      state.spawnCounter = 0;
+      state.spawnTimer = 0;
+      state.targetSpawnIn = 1 + Math.floor(state.prng() * 3);
+      state.letterErrorsThisRound = new Set();
+
+      if (retryWord.retryCount === 2 && Array.isArray(retryWord.firstTryCorrectIndices)) {
+        let prefilled = retryWord.firstTryCorrectIndices.filter((idx) => idx < state.targetChars.length);
+        if (prefilled.length >= state.targetChars.length && state.targetChars.length > 0) {
+          prefilled = prefilled.slice(0, state.targetChars.length - 1);
+        }
+        state.prefilledIndices = prefilled;
+      } else {
+        state.prefilledIndices = [];
+      }
+      state.currentIndex = getNextUnfilledIndex(state.targetChars, state.prefilledIndices, 0);
+      spawnInitialWaveOnState(state);
+    }
   }
 
   return {
@@ -968,6 +1078,16 @@ export function clampDeltaTime(rawDt = 0) {
  */
 export function stepGame(initialState, action = null, dt = 0) {
   const nextState = cloneGameState(initialState);
+
+  // Clean up duplicate queued retry item once an action begins on the active retry word
+  if (
+    nextState.queue.length > 0 &&
+    nextState.currentWordObj &&
+    nextState.queue[0].word === nextState.currentWordObj.word &&
+    nextState.queue[0].retryCount === nextState.currentWordObj.retryCount
+  ) {
+    nextState.queue.shift();
+  }
 
   if (action && typeof action === 'object') {
     switch (action.type) {
