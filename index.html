@@ -126,6 +126,11 @@
       </div>
 
       <div class="topbar-actions">
+        <div id="hud-stars-pill" class="hud-stars-pill" title="Bonus cosmetic stars earned" hidden>
+          <span class="star-icon" aria-hidden="true">⭐</span>
+          <span id="hud-stars-count">0</span>
+        </div>
+
         <button
           type="button"
           id="hud-profile-pill"
@@ -280,10 +285,16 @@
           <p id="auth-error-msg" class="auth-error-msg" hidden></p>
         </div>
 
-        <button type="button" id="btn-play" class="big-play-btn">
-          <span class="play-btn-bubble" aria-hidden="true">▶</span>
-          <span id="btn-play-text">Play</span>
-        </button>
+        <div class="session-mode-buttons" id="session-mode-buttons">
+          <button type="button" id="btn-play" class="big-play-btn">
+            <span class="play-btn-bubble" aria-hidden="true">▶</span>
+            <span id="btn-play-text">Play</span>
+          </button>
+          <button type="button" id="btn-quick-splash" class="big-play-btn quick-splash-btn" title="Quick 3-word session for low-energy days (due words only)">
+            <span class="play-btn-bubble" aria-hidden="true">⚡</span>
+            <span id="btn-quick-splash-text">Quick Splash (3 Words)</span>
+          </button>
+        </div>
 
         <div id="welcome-user-pill" class="auth-user-pill" hidden>
           <img id="welcome-user-avatar" class="auth-user-avatar" alt="" hidden />
@@ -312,12 +323,23 @@
           You spelled every word in the hot tub with zero errors!
         </p>
 
+        <div id="bonus-stars-banner" class="bonus-stars-banner" hidden>
+          <span class="bonus-stars-icon" aria-hidden="true">⭐</span>
+          <span id="bonus-stars-text">Bonus Star! All due words for today reached zero!</span>
+        </div>
+
         <div id="complete-word-chips" class="complete-word-chips"></div>
 
-        <button type="button" id="btn-play-again" class="big-play-btn">
-          <span class="play-btn-bubble" aria-hidden="true">🫧</span>
-          <span>Play Again</span>
-        </button>
+        <div class="complete-actions-row">
+          <button type="button" id="btn-play-again" class="big-play-btn">
+            <span class="play-btn-bubble" aria-hidden="true">🫧</span>
+            <span>Play Again</span>
+          </button>
+          <button type="button" id="btn-complete-quick-splash" class="big-play-btn quick-splash-btn" hidden>
+            <span class="play-btn-bubble" aria-hidden="true">⚡</span>
+            <span>Quick Splash</span>
+          </button>
+        </div>
       </div>
     </div>
 

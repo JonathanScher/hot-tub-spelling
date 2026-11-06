@@ -24,7 +24,10 @@ import {
   getProfileStatsSummary,
   DEFAULT_PROFILES,
   getGardenStage,
-  GARDEN_STAGES
+  GARDEN_STAGES,
+  getCosmeticStars,
+  awardCosmeticStars,
+  areAllDueWordsCleared
 } from './srs.js';
 import { syncManager } from './sync.js';
 import { HotTubGame } from './game.js';
@@ -43,6 +46,13 @@ function initApp() {
   const startSyncNote = document.getElementById('start-sync-note');
   const btnPlay = document.getElementById('btn-play');
   const btnPlayText = document.getElementById('btn-play-text');
+  const btnQuickSplash = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-quick-splash'));
+  const btnQuickSplashText = document.getElementById('btn-quick-splash-text');
+  const btnCompleteQuickSplash = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-complete-quick-splash'));
+  const bonusStarsBanner = document.getElementById('bonus-stars-banner');
+  const bonusStarsText = document.getElementById('bonus-stars-text');
+  const hudStarsPill = document.getElementById('hud-stars-pill');
+  const hudStarsCount = document.getElementById('hud-stars-count');
 
   // Learner Profiles DOM References
   const welcomeProfileSelector = document.getElementById('welcome-profile-selector');
@@ -166,6 +176,9 @@ function initApp() {
     }
     if (btnPlay) {
       btnPlay.hidden = !isSignedIn;
+    }
+    if (btnQuickSplash) {
+      btnQuickSplash.hidden = !isSignedIn;
     }
 
     if (authErrorMsg) {
@@ -474,6 +487,33 @@ function initApp() {
         : 'Sign in with Google to enable Firebase Sync';
       startSyncNote.textContent = `${activeWords.length} words (${dueCount} due today) • ${syncText}`;
     }
+
+    const activeProf = getActiveProfile();
+    const totalStars = getCosmeticStars(activeProf.id);
+
+    if (btnQuickSplashText) {
+      if (dueCount === 0) {
+        btnQuickSplashText.textContent = 'Quick Splash (0 due ⭐)';
+        if (btnQuickSplash) {
+          btnQuickSplash.title = 'All due words for today are cleared! Extra practice available in Full Practice mode.';
+        }
+      } else {
+        const splashCount = Math.min(3, dueCount);
+        btnQuickSplashText.textContent = `Quick Splash (${splashCount} Word${splashCount === 1 ? '' : 's'})`;
+        if (btnQuickSplash) {
+          btnQuickSplash.title = `3-word micro-session for low-energy days (${splashCount} due word${splashCount === 1 ? '' : 's'} ready)`;
+        }
+      }
+    }
+
+    if (hudStarsPill && hudStarsCount) {
+      if (totalStars > 0) {
+        hudStarsPill.hidden = false;
+        hudStarsCount.textContent = String(totalStars);
+      } else {
+        hudStarsPill.hidden = true;
+      }
+    }
   }
 
   // Ensure Zoé's profile is initialized & reset
@@ -497,7 +537,7 @@ function initApp() {
   refreshWelcomeMetadata();
 
   // 6. Session Start ("Play" & "Play Again" Buttons)
-  async function launchNewSession(triggerBtn, labelEl) {
+  async function launchNewSession(triggerBtn, labelEl, options = {}) {
     if (!authManager.isAuthenticated()) {
       showToast('Please sign in once with an authorized family Google account first.');
       return;
@@ -520,7 +560,14 @@ function initApp() {
     }
 
     const allWords = loadWords();
-    const sessionWords = buildSessionWords(allWords, 8, 10);
+    const sessionWords = buildSessionWords(allWords, 8, 10, options);
+
+    if (sessionWords.length === 0) {
+      if (triggerBtn) triggerBtn.disabled = false;
+      if (labelEl && prevText) labelEl.textContent = prevText;
+      showToast('No words due today! Try Full Practice or come back tomorrow ⭐');
+      return;
+    }
 
     if (startOverlay) {
       startOverlay.hidden = true;
@@ -539,12 +586,23 @@ function initApp() {
   }
 
   btnPlay.addEventListener('click', () => launchNewSession(btnPlay, btnPlayText));
+  if (btnQuickSplash) {
+    btnQuickSplash.addEventListener('click', () =>
+      launchNewSession(btnQuickSplash, btnQuickSplashText, { quickSplash: true })
+    );
+  }
   btnPlayAgain.addEventListener('click', () => launchNewSession(btnPlayAgain, null));
+  if (btnCompleteQuickSplash) {
+    btnCompleteQuickSplash.addEventListener('click', () =>
+      launchNewSession(btnCompleteQuickSplash, null, { quickSplash: true })
+    );
+  }
 
   // Designer preview shortcut (e.g. for headless testing & screenshots)
   if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('preview')) {
+    const isQuick = new URLSearchParams(window.location.search).has('quick');
     const allWords = loadWords();
-    const sessionWords = buildSessionWords(allWords, 8, 10);
+    const sessionWords = buildSessionWords(allWords, 8, 10, { quickSplash: isQuick });
     if (startOverlay) {
       startOverlay.hidden = true;
       startOverlay.classList.remove('is-active');
@@ -565,13 +623,48 @@ function initApp() {
   // 8. Session Completion Screen
   function renderCompletionScreen(summary) {
     if (!completeOverlay) return;
-    const allWordsByKey = new Map(loadWords().map((w) => [w.word, w]));
+    const activeProf = getActiveProfile();
+    const today = getLocalISODate();
+    const allWords = loadWords();
+    const allWordsByKey = new Map(allWords.map((w) => [w.word, w]));
+
+    const dueCount = allWords.filter(
+      (w) => w.active !== false && (!w.next_review || w.next_review <= today)
+    ).length;
 
     if (completeSummaryText) {
       completeSummaryText.textContent =
         summary.firstTryPerfect === summary.totalWords
           ? `Spotless! All ${summary.totalWords} words spelled with zero errors on the first try!`
           : `All ${summary.totalWords} words mastered! (${summary.firstTryPerfect} spotless on first try)`;
+    }
+
+    // Balance Quick Splash by awarding bonus cosmetic stars when all due words for the day reach zero
+    if (dueCount === 0) {
+      const updatedStars = awardCosmeticStars(1, activeProf.id);
+      if (bonusStarsBanner) {
+        bonusStarsBanner.hidden = false;
+        if (bonusStarsText) {
+          bonusStarsText.textContent = `Bonus Star Awarded! ⭐ All due words for today reached zero! (Total Stars: ${updatedStars})`;
+        }
+      }
+    } else {
+      if (bonusStarsBanner) {
+        bonusStarsBanner.hidden = true;
+      }
+    }
+
+    if (btnCompleteQuickSplash) {
+      if (dueCount > 0) {
+        const splashCount = Math.min(3, dueCount);
+        btnCompleteQuickSplash.hidden = false;
+        const textSpan = btnCompleteQuickSplash.querySelector('span:last-child');
+        if (textSpan) {
+          textSpan.textContent = `Quick Splash (${splashCount} Word${splashCount === 1 ? '' : 's'})`;
+        }
+      } else {
+        btnCompleteQuickSplash.hidden = true;
+      }
     }
 
     if (completeWordChips) {
@@ -591,6 +684,7 @@ function initApp() {
       }
     }
 
+    refreshWelcomeMetadata();
     completeOverlay.hidden = false;
     completeOverlay.classList.add('is-active');
   }
