@@ -10,10 +10,12 @@ import {
   getPlausibleDistractors,
   isMotorSlip,
   isUnaccentedLookalike,
-  isAdjacentLetter
+  isAdjacentLetter,
+  classifyTrapError,
+  normalizeCategoryName
 } from './srs.js';
 
-export { isMotorSlip, isUnaccentedLookalike, isAdjacentLetter };
+export { isMotorSlip, isUnaccentedLookalike, isAdjacentLetter, classifyTrapError, normalizeCategoryName };
 
 export const MIN_BUBBLES = 5;
 export const MAX_BUBBLES = 7;
@@ -97,6 +99,7 @@ export const CHEER_MESSAGES_PRACTICE = [
  * @property {number} currentIndex
  * @property {number} wordErrorCount
  * @property {number} letterErrorCount
+ * @property {Record<string, number> | null} [trapHistory]
  * @property {boolean} watermarkActive
  * @property {boolean} [hintWatermarkUsed]
  * @property {Array<{ tappedChar: string, targetChar: string, targetIndex: number }>} [wrongTapsOnWord]
@@ -127,6 +130,8 @@ export const CHEER_MESSAGES_PRACTICE = [
  * @property {number} [seed=1]
  * @property {import('./prng.js').SeededPRNG | (() => number)} [prng]
  * @property {boolean} [autoStart=false]
+ * @property {Record<string, number>} [trapHistory]
+ * @property {any} [profile]
  */
 
 /**
@@ -287,6 +292,9 @@ export function createGameState(config = {}) {
     currentIndex: 0,
     wordErrorCount: 0,
     letterErrorCount: 0,
+    trapHistory: config.trapHistory && typeof config.trapHistory === 'object'
+      ? { ...config.trapHistory }
+      : (config.profile && config.profile.trapHistory ? { ...config.profile.trapHistory } : null),
     watermarkActive: false,
     hintWatermarkUsed: false,
     wrongTapsOnWord: [],
@@ -390,7 +398,8 @@ export function chooseNextBubbleCharOnState(state) {
     requiredChar,
     state.currentWordObj ? state.currentWordObj.word : '',
     state.allVocabWords,
-    state.currentIndex
+    state.currentIndex,
+    state.trapHistory
   );
   if (distractors.length > 0) {
     return distractors[Math.floor(state.prng() * distractors.length)];
@@ -727,6 +736,7 @@ export function useHintOnState(state) {
  *   bubble?: BubbleEntity,
  *   matchedSlotIndex?: number,
  *   matchedChar?: string,
+ *   trapCategory?: string | null,
  *   wordCompleted?: boolean,
  *   autoWatermarkTriggered?: boolean,
  *   urgentSpawned?: BubbleEntity[]
@@ -841,6 +851,14 @@ export function handleBubbleTapOnState(state, bubbleOrId) {
       state.letterErrorsThisRound.add(state.currentIndex);
     }
 
+    const currentWord = state.currentWordObj ? state.currentWordObj.word : '';
+    const trapCategory = classifyTrapError(targetChar, tappedChar, currentWord, state.currentIndex);
+    if (trapCategory && state.trapHistory && typeof state.trapHistory === 'object') {
+      const canonical = normalizeCategoryName(trapCategory);
+      state.trapHistory[canonical] = (state.trapHistory[canonical] || 0) + 1;
+      state.trapHistory[trapCategory] = state.trapHistory[canonical];
+    }
+
     let autoWatermarkTriggered = false;
     if (state.letterErrorCount >= 2 && !state.watermarkActive) {
       state.watermarkActive = true;
@@ -852,6 +870,7 @@ export function handleBubbleTapOnState(state, bubbleOrId) {
       handled: true,
       correct: false,
       bubble,
+      trapCategory,
       wordCompleted: false,
       autoWatermarkTriggered
     };

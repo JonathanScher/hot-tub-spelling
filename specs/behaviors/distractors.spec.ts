@@ -323,4 +323,94 @@ describe('Pedagogical French Distractor Matrix (CPG, Silent Letters & Dys/Phonol
       );
     });
   });
+
+  describe('8. Personal Error Weights & 50% Category Cap (Issue #7)', () => {
+    const SILENT_TRAPS = new Set(['t', 'd', 's', 'x', 'p', 'g', 'c', 'z', 'e']);
+    const BD_TRAPS = new Set(['b', 'd', 'p', 'q']);
+    const NASAL_TRAPS = new Set(['n', 'm']);
+
+    it('shifts distractor budget toward silent finals when they are blind spots and bd_flips are mastered', () => {
+      // GIVEN a profile where bd_flips are mastered (0 errors) but silent finals are a blind spot (10 errors)
+      const blindSpotTrapHistory = { 'silent finals': 10, 'b/d/p/q flips': 0 };
+      const masteredTrapHistory = { 'silent finals': 0, 'b/d/p/q flips': 10 };
+
+      // WHEN generating distractors for "grand" at index 4 (silent 'd')
+      const poolWithBlindSpot = (getPlausibleDistractors as any)('d', 'grand', [{ word: 'grand' }], 4, { trapHistory: blindSpotTrapHistory }) as string[];
+      const poolWithoutBlindSpot = (getPlausibleDistractors as any)('d', 'grand', [{ word: 'grand' }], 4, { trapHistory: masteredTrapHistory }) as string[];
+
+      const silentCountBlindSpot = poolWithBlindSpot.filter((ch) => SILENT_TRAPS.has(ch)).length;
+      const silentCountMastered = poolWithoutBlindSpot.filter((ch) => SILENT_TRAPS.has(ch)).length;
+
+      // THEN the blind spot pool allocates a higher budget / proportion to silent final distractors
+      expect(silentCountBlindSpot / poolWithBlindSpot.length).toBeGreaterThan(silentCountMastered / poolWithoutBlindSpot.length);
+    });
+
+    it('shifts distractor budget toward b/d/p/q flips when visual flips are blind spots and silent finals are mastered', () => {
+      // GIVEN a profile where bd_flips have 10 errors and silent finals have 0 errors
+      const blindSpotTrapHistory = { 'b/d/p/q flips': 10, 'silent finals': 0 };
+      const masteredTrapHistory = { 'b/d/p/q flips': 0, 'silent finals': 10 };
+
+      // WHEN generating distractors for "bateau" at index 0 ('b')
+      const poolWithBlindSpot = (getPlausibleDistractors as any)('b', 'bateau', [{ word: 'bateau' }], 0, { trapHistory: blindSpotTrapHistory }) as string[];
+      const poolWithoutBlindSpot = (getPlausibleDistractors as any)('b', 'bateau', [{ word: 'bateau' }], 0, { trapHistory: masteredTrapHistory }) as string[];
+
+      const bdCountBlindSpot = poolWithBlindSpot.filter((ch) => BD_TRAPS.has(ch)).length;
+      const bdCountMastered = poolWithoutBlindSpot.filter((ch) => BD_TRAPS.has(ch)).length;
+
+      // THEN visual flip distractors ('d', 'p', 'q') receive higher weight when bd_flips is a blind spot
+      expect(bdCountBlindSpot / poolWithBlindSpot.length).toBeGreaterThan(bdCountMastered / poolWithoutBlindSpot.length);
+    });
+
+    it('strictly caps any single category at 50% of the distractor pool, even with extreme error counts', () => {
+      // GIVEN extreme error counts (1000 errors) for each trap category
+      const extremeSilent = { 'silent finals': 1000 };
+      const poolSilent = (getPlausibleDistractors as any)('d', 'grand', [{ word: 'grand' }], 4, { trapHistory: extremeSilent }) as string[];
+      const silentCatCount = (poolSilent as any).categoryCounts ? (poolSilent as any).categoryCounts['silent finals'] : 0;
+      expect(silentCatCount).toBeGreaterThan(0);
+      expect(silentCatCount).toBeLessThanOrEqual(Math.floor(poolSilent.length * 0.5));
+
+      // AND GIVEN extreme errors for bd_flips
+      const extremeBD = { 'b/d/p/q flips': 1000 };
+      const poolBD = (getPlausibleDistractors as any)('b', 'bateau', [{ word: 'bateau' }], 0, { trapHistory: extremeBD }) as string[];
+      const bdCatCount = (poolBD as any).categoryCounts ? (poolBD as any).categoryCounts['b/d/p/q flips'] : 0;
+      expect(bdCatCount).toBeGreaterThan(0);
+      expect(bdCatCount).toBeLessThanOrEqual(Math.floor(poolBD.length * 0.5));
+
+      // AND GIVEN extreme errors for nasal vowels
+      const extremeNasal = { 'nasal vowels': 1000 };
+      const poolNasal = (getPlausibleDistractors as any)('m', 'printemps', [{ word: 'printemps' }], 6, { trapHistory: extremeNasal }) as string[];
+      const nasalCatCount = (poolNasal as any).categoryCounts ? (poolNasal as any).categoryCounts['nasal vowels'] : 0;
+      expect(nasalCatCount).toBeGreaterThan(0);
+      expect(nasalCatCount).toBeLessThanOrEqual(Math.floor(poolNasal.length * 0.5));
+    });
+
+    it('maintains 50% category cap invariant across random words, indices, and error weights (fast-check)', () => {
+      fc.assert(
+        fc.property(
+          fc.constantFrom('printemps', 'grand', 'bateau', 'quinze', 'élève', 'pomme'),
+          fc.integer({ min: 0, max: 8 }),
+          fc.record({
+            'silent finals': fc.integer({ min: 0, max: 200 }),
+            'b/d/p/q flips': fc.integer({ min: 0, max: 200 }),
+            'nasal vowels': fc.integer({ min: 0, max: 200 }),
+            'accents': fc.integer({ min: 0, max: 200 })
+          }),
+          (word, rawIdx, trapHistory) => {
+            const idx = rawIdx % word.length;
+            const reqChar = word[idx];
+            const pool = (getPlausibleDistractors as any)(reqChar, word, [{ word }], idx, { trapHistory }) as string[];
+
+            expect(pool.length).toBeGreaterThan(0);
+            expect(pool).not.toContain(reqChar);
+
+            const categoryCounts = (pool as any).categoryCounts || {};
+            for (const [cat, count] of Object.entries(categoryCounts)) {
+              expect(count as number).toBeLessThanOrEqual(Math.floor(pool.length * 0.5));
+            }
+          }
+        ),
+        { numRuns: 40 }
+      );
+    });
+  });
 });

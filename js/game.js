@@ -16,6 +16,7 @@
 
 import { soundEngine } from './audio.js';
 import { speechEngine } from './speech.js';
+import { recordTrapError, getProfileTrapHistory } from './srs.js';
 import { createPRNG } from './prng.js';
 import {
   MIN_BUBBLES,
@@ -206,6 +207,7 @@ export class HotTubGame {
     this.sessionResults = [];
     this.sessionSummary = null;
     this.lastCheerMessage = null;
+    this.trapHistory = getProfileTrapHistory();
 
     this.running = true;
     this.paused = false;
@@ -579,6 +581,10 @@ export class HotTubGame {
     }
     const res = handleBubbleTapOnState(this, bubble);
     if (!res.handled || res.correct) return;
+
+    if (res.trapCategory) {
+      recordTrapError(res.trapCategory);
+    }
 
     soundEngine.playWrongFizzle();
 
