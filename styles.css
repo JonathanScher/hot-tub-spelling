@@ -536,33 +536,12 @@ body {
   45% { transform: scale(1.24); }
   100% { transform: scale(1); }
 }
-  flex-shrink: 0;
-}
 
 .topbar-actions {
   display: flex;
   align-items: center;
   gap: 7px;
   flex-shrink: 0;
-}
-
-.sync-status-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: #C9B8A6;
-  border: 1.5px solid rgba(74, 53, 37, 0.3);
-  transition: background-color 0.25s ease;
-  flex-shrink: 0;
-}
-
-.sync-status-dot.is-online {
-  background: #82BE92;
-}
-
-.sync-status-dot.is-syncing {
-  background: #8DC3DF;
-  animation: gentlePulse 1s ease-in-out infinite;
 }
 
 .icon-pill-btn,
@@ -577,6 +556,7 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  vertical-align: middle;
   cursor: pointer;
   padding: 0;
   flex-shrink: 0;
@@ -2268,6 +2248,7 @@ body {
   font-family: var(--font-display);
   font-size: 0.78rem;
   font-weight: 700;
+  vertical-align: middle;
   cursor: pointer;
   box-shadow:
     0 3px 0 var(--wood-caddy-bevel),
@@ -2287,6 +2268,7 @@ body {
     height: 38px;
     justify-content: center;
     border-radius: 50%;
+    gap: 0;
   }
 }
 
@@ -2297,6 +2279,10 @@ body {
 
 .hud-profile-icon {
   font-size: 1rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Welcome Screen Profile Selector */

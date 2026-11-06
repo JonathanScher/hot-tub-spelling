@@ -82,7 +82,6 @@ function initApp() {
 
   const btnListen = document.getElementById('btn-listen');
   const btnHint = document.getElementById('btn-hint');
-  const syncStatusDot = document.getElementById('sync-status-dot');
 
   const btnParentLock = document.getElementById('btn-parent-lock');
   const lockHoldRing = document.getElementById('lock-hold-ring');
@@ -284,12 +283,6 @@ function initApp() {
 
   // 2. Wire Sync Status Indicator
   syncManager.onStatusChange((status) => {
-    if (!syncStatusDot) return;
-    syncStatusDot.classList.toggle('is-syncing', Boolean(status.syncing));
-    syncStatusDot.classList.toggle('is-online', Boolean(status.connected && !status.syncing));
-    if (status.message) {
-      syncStatusDot.title = status.message;
-    }
     updateParentSyncBadge(status);
   });
 
@@ -480,10 +473,6 @@ function initApp() {
           : 'Firebase Cloud Sync active'
         : 'Sign in with Google to enable Firebase Sync';
       startSyncNote.textContent = `${activeWords.length} words (${dueCount} due today) • ${syncText}`;
-    }
-
-    if (syncStatusDot) {
-      syncStatusDot.classList.toggle('is-online', isAuthed && navigator.onLine !== false);
     }
   }
 
