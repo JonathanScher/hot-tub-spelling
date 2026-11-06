@@ -2629,16 +2629,48 @@ body {
 
 .soap-bubble.is-flicked-away {
   pointer-events: none;
-  animation: flickAway 0.26s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  z-index: 15;
 }
 
-@keyframes flickAway {
+.soap-bubble.is-flicked-away .bubble-art {
+  animation: flickTossArtBurst 0.33s cubic-bezier(0.18, 0.88, 0.32, 1.08) forwards;
+}
+
+.soap-bubble.is-flicked-away .bubble-char {
+  animation: flickTossCharBurst 0.33s cubic-bezier(0.18, 0.88, 0.32, 1.08) forwards;
+}
+
+@keyframes flickTossArtBurst {
   0% {
-    transform: scale(1) rotate(0deg);
+    transform: translate3d(0, 0, 0) scale(1.12, 0.88) rotate(0deg);
     opacity: 1;
   }
+  28% {
+    transform: translate3d(calc(var(--flick-tx, 120px) * 0.38), calc(var(--flick-ty, -65px) * 0.38), 0) scale(0.92, 1.08) rotate(calc(var(--flick-rot, 28deg) * 0.4));
+    opacity: 1;
+  }
+  72% {
+    transform: translate3d(calc(var(--flick-tx, 120px) * 0.84), calc(var(--flick-ty, -65px) * 0.84), 0) scale(1.26) rotate(var(--flick-rot, 28deg));
+    opacity: 0.92;
+    filter: brightness(1.2) drop-shadow(0 4px 10px rgba(188, 224, 242, 0.45));
+  }
   100% {
-    transform: scale(0.15) translate(80px, -60px) rotate(45deg);
+    transform: translate3d(var(--flick-tx, 120px), var(--flick-ty, -65px), 0) scale(1.52) rotate(var(--flick-rot, 28deg));
+    opacity: 0;
+  }
+}
+
+@keyframes flickTossCharBurst {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1.06);
+    opacity: 1;
+  }
+  65% {
+    transform: translate3d(calc(var(--flick-tx, 120px) * 0.78), calc(var(--flick-ty, -65px) * 0.78), 0) scale(0.9) rotate(var(--flick-rot, 28deg));
+    opacity: 0.88;
+  }
+  100% {
+    transform: translate3d(var(--flick-tx, 120px), var(--flick-ty, -65px), 0) scale(0.4) rotate(var(--flick-rot, 28deg));
     opacity: 0;
   }
 }

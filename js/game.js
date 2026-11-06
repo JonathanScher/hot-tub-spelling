@@ -649,8 +649,69 @@ export class HotTubGame {
   }
 
   /**
+   * Launches the bubble from its exact current spot along the flick vector with elastic
+   * squash-and-stretch, spawns trailing soap droplets, and bursts into foam mid-flight.
+   * @param {import('./game-core.js').BubbleEntity} bubble
+   * @param {{ dx?: number, dy?: number } | null} gesture
+   * @param {boolean} isTargetOops
+   */
+  _animateFlickTossAndBurst(bubble, gesture, isTargetOops = false) {
+    const dx = gesture && typeof gesture.dx === 'number' ? gesture.dx : 120;
+    const dy = gesture && typeof gesture.dy === 'number' ? gesture.dy : -65;
+    const angle = Math.atan2(dy, dx);
+    const dist = 148;
+    const tx = Math.cos(angle) * dist;
+    const ty = Math.sin(angle) * dist;
+    const rotDeg = (tx >= 0 ? 1 : -1) * 28;
+
+    if (bubble.el) {
+      // Keep bubble.el anchored at its translate3d(left, top, 0) stage coordinates
+      // and drive the toss trajectory on child layers via CSS variables
+      bubble.el.style.setProperty('--flick-tx', `${tx.toFixed(1)}px`);
+      bubble.el.style.setProperty('--flick-ty', `${ty.toFixed(1)}px`);
+      bubble.el.style.setProperty('--flick-rot', `${rotDeg}deg`);
+      bubble.el.classList.add('is-flicked-away');
+      if (isTargetOops) {
+        bubble.el.classList.add('is-flicked-target-oops');
+      }
+    }
+
+    // Spawn 3 trailing soap droplets along the initial launch path
+    if (this.stage && typeof document !== 'undefined') {
+      const trailColors = isTargetOops
+        ? ['#F48F82', '#D96657', '#F9B26C']
+        : ['#BCE0F2', '#FFF6E6', '#B8DEC8'];
+      for (let i = 0; i < 3; i++) {
+        const frac = 0.18 + i * 0.22;
+        const drop = document.createElement('span');
+        drop.className = 'pop-droplet';
+        drop.style.left = `${(bubble.x + tx * frac).toFixed(1)}px`;
+        drop.style.top = `${(bubble.y + ty * frac).toFixed(1)}px`;
+        drop.style.backgroundColor = trailColors[i % trailColors.length];
+        const spreadAngle = angle + (this.prng() - 0.5) * 0.9;
+        const spreadDist = 16 + this.prng() * 18;
+        drop.style.setProperty('--dx', `${(Math.cos(spreadAngle) * spreadDist).toFixed(1)}px`);
+        drop.style.setProperty('--dy', `${(Math.sin(spreadAngle) * spreadDist).toFixed(1)}px`);
+        this.stage.appendChild(drop);
+        setTimeout(() => drop.remove(), 420);
+      }
+    }
+
+    // Mid-flight foam burst right where the tossed bubble pops (~82% along trajectory)
+    setTimeout(() => {
+      this._spawnPopDroplets(
+        bubble.x + tx * 0.82,
+        bubble.y + ty * 0.82,
+        bubble.diameter * 0.92
+      );
+    }, 210);
+
+    setTimeout(() => this._removeBubble(bubble), 340);
+  }
+
+  /**
    * Visual & audio feedback when the player accidentally flicks away the required target letter.
-   * The bubble flies away with a warm coral/amber tint, resets combo to 0, and triggers a gentle "Oops!" message.
+   * The bubble launches away with a warm coral/amber tint, bursts mid-flight, resets combo to 0, and shows a gentle "Oops!" message.
    * @param {import('./game-core.js').BubbleEntity} bubble
    * @param {{ dx?: number, dy?: number } | null} gesture
    * @param {any} res
@@ -662,18 +723,7 @@ export class HotTubGame {
       soundEngine.playWrongFizzle();
     }
 
-    if (bubble.el) {
-      bubble.el.classList.add('is-flicked-away', 'is-flicked-target-oops');
-      if (gesture && (gesture.dx || gesture.dy)) {
-        const angle = Math.atan2(gesture.dy, gesture.dx);
-        const dist = 180;
-        const tx = Math.cos(angle) * dist;
-        const ty = Math.sin(angle) * dist;
-        bubble.el.style.transform = `translate(${bubble.x - bubble.radius + tx}px, ${bubble.y - bubble.radius + ty}px) scale(0.25) rotate(${angle * 57.3}deg)`;
-        bubble.el.style.opacity = '0';
-      }
-    }
-    setTimeout(() => this._removeBubble(bubble), 280);
+    this._animateFlickTossAndBurst(bubble, gesture, true);
 
     if (this.mascotWrap) {
       this.mascotWrap.classList.remove('is-happy-nod');
@@ -716,18 +766,7 @@ export class HotTubGame {
       soundEngine.playBubblePop(2);
     }
 
-    if (bubble.el) {
-      bubble.el.classList.add('is-flicked-away');
-      if (gesture && (gesture.dx || gesture.dy)) {
-        const angle = Math.atan2(gesture.dy, gesture.dx);
-        const dist = 180;
-        const tx = Math.cos(angle) * dist;
-        const ty = Math.sin(angle) * dist;
-        bubble.el.style.transform = `translate(${bubble.x - bubble.radius + tx}px, ${bubble.y - bubble.radius + ty}px) scale(0.2) rotate(${angle * 57.3}deg)`;
-        bubble.el.style.opacity = '0';
-      }
-    }
-    setTimeout(() => this._removeBubble(bubble), 240);
+    this._animateFlickTossAndBurst(bubble, gesture, false);
 
     // Feed bath companion mascot and praise impulse inhibition
     this._nudgeMascotHappy();
