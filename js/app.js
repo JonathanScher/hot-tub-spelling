@@ -159,6 +159,10 @@ function initApp() {
       }
     },
 
+    onTrapError: (_trapCategory, updatedHistory) => {
+      syncManager.queueTrapHistoryUpdate(getActiveProfileId(), updatedHistory).catch(() => {});
+    },
+
     onSessionComplete: (summary) => {
       renderCompletionScreen(summary);
     }
@@ -427,6 +431,7 @@ function initApp() {
         for (const w of resetWords) {
           syncManager.queueWordUpdate(w, 'daughter').catch(() => {});
         }
+        syncManager.queueTrapHistoryUpdate('daughter', {}).catch(() => {});
         if (syncManager.isCloudReady() && navigator.onLine !== false) {
           await syncManager.flushPendingChanges();
         }
@@ -446,6 +451,9 @@ function initApp() {
       );
       if (confirmed) {
         resetProfileProgress('test');
+        if (syncManager.isTestProfileSyncEnabled()) {
+          syncManager.queueTrapHistoryUpdate('test', {}).catch(() => {});
+        }
         refreshProfileUI();
         if (parentModal && !parentModal.hidden) {
           renderParentWordsTable();

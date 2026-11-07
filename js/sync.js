@@ -27,7 +27,14 @@ import {
   getCurrentWeekLabel,
   normalizeWord,
   getActiveProfileId,
-  getDefaultAudioUrl
+  getDefaultAudioUrl,
+  DIRTY_TRAP_HISTORY_STORAGE_KEY,
+  TEST_DIRTY_TRAP_HISTORY_STORAGE_KEY,
+  getDirtyProfileTrapHistory,
+  clearDirtyProfileTrapHistory,
+  markProfileTrapHistoryDirty,
+  getProfileTrapHistory,
+  mergeProfilesFromCloud
 } from './srs.js';
 
 const DIRTY_WORDS_STORAGE_KEY = 'hottub_dirty_srs_queue_v2';
@@ -127,6 +134,28 @@ class CloudSyncManager {
       updated_at: new Date().toISOString()
     };
     this._saveDirtyMap(queue, resolvedProfile);
+
+    if (auth.currentUser && navigator.onLine !== false) {
+      await this.flushPendingChanges();
+    }
+  }
+
+  /**
+   * Queues an updated trap error history locally and pushes to Firestore if online.
+   * If in 'test' profile and test sync is disabled, acts as a safe local sandbox (skips remote sync).
+   * @param {string} [profileId]
+   * @param {Record<string, number>} [trapHistory]
+   */
+  async queueTrapHistoryUpdate(profileId, trapHistory) {
+    const resolvedProfile = profileId || getActiveProfileId();
+
+    if (resolvedProfile === 'test' && !this.isTestProfileSyncEnabled()) {
+      // In local sandbox mode: do not queue to cloud or touch Firestore
+      return;
+    }
+
+    const currentHistory = trapHistory || getProfileTrapHistory(resolvedProfile);
+    markProfileTrapHistoryDirty(resolvedProfile, currentHistory);
 
     if (auth.currentUser && navigator.onLine !== false) {
       await this.flushPendingChanges();
@@ -280,8 +309,13 @@ class CloudSyncManager {
         let remoteCurrentWeek = '';
         if (metaSnap && metaSnap.exists()) {
           const metaData = metaSnap.data();
-          if (metaData && metaData.current_week_label) {
-            remoteCurrentWeek = String(metaData.current_week_label).trim();
+          if (metaData) {
+            if (metaData.current_week_label) {
+              remoteCurrentWeek = String(metaData.current_week_label).trim();
+            }
+            if (metaData.profiles || metaData.trapHistory) {
+              mergeProfilesFromCloud(metaData);
+            }
           }
         }
 
@@ -366,10 +400,25 @@ class CloudSyncManager {
     }
 
     const metaRef = doc(db, METADATA_COLLECTION, APP_STATE_DOC);
+    const daughterTrapHistory = getProfileTrapHistory('daughter');
+    const profilesPayload = {
+      daughter: {
+        trapHistory: daughterTrapHistory,
+        updated_at: nowIso
+      }
+    };
+    if (this.isTestProfileSyncEnabled()) {
+      profilesPayload.test = {
+        trapHistory: getProfileTrapHistory('test'),
+        updated_at: nowIso
+      };
+    }
     batch.set(
       metaRef,
       {
         current_week_label: currentWeekLabel || 'Week 8',
+        profiles: profilesPayload,
+        trapHistory: daughterTrapHistory,
         updated_at: nowIso,
         updated_by: (auth.currentUser && auth.currentUser.email) || ''
       },
@@ -507,6 +556,57 @@ class CloudSyncManager {
       }
     }
 
+    // 4. Flush dirty trap error history (personal performance) for daughter profile
+    const daughterTrapDirty = getDirtyProfileTrapHistory('daughter');
+    if (daughterTrapDirty) {
+      try {
+        const metaRef = doc(db, METADATA_COLLECTION, APP_STATE_DOC);
+        const nowIso = new Date().toISOString();
+        const payload = {
+          profiles: {
+            daughter: {
+              trapHistory: daughterTrapDirty.trapHistory || {},
+              updated_at: daughterTrapDirty.updated_at || nowIso
+            }
+          },
+          trapHistory: daughterTrapDirty.trapHistory || {},
+          updated_at: nowIso,
+          updated_by: (auth.currentUser && auth.currentUser.email) || ''
+        };
+        await setDoc(metaRef, payload, { merge: true });
+        clearDirtyProfileTrapHistory('daughter');
+        this._recordSyncSuccess();
+      } catch {
+        // Keep dirty for next retry
+      }
+    }
+
+    // 5. Flush dirty trap error history for test profile (if test sync is explicitly enabled)
+    if (this.isTestProfileSyncEnabled()) {
+      const testTrapDirty = getDirtyProfileTrapHistory('test');
+      if (testTrapDirty) {
+        try {
+          const metaRef = doc(db, METADATA_COLLECTION, APP_STATE_DOC);
+          const nowIso = new Date().toISOString();
+          const payload = {
+            profiles: {
+              test: {
+                trapHistory: testTrapDirty.trapHistory || {},
+                updated_at: testTrapDirty.updated_at || nowIso
+              }
+            },
+            updated_at: nowIso,
+            updated_by: (auth.currentUser && auth.currentUser.email) || ''
+          };
+          await setDoc(metaRef, payload, { merge: true });
+          clearDirtyProfileTrapHistory('test');
+          this._recordSyncSuccess();
+        } catch {
+          // Keep dirty for next retry
+        }
+      }
+    }
+
     return daughterSuccess;
   }
 
@@ -527,9 +627,13 @@ class CloudSyncManager {
   }
 
   getPendingSyncCount() {
-    return Object.keys(this._loadDirtyMap('daughter')).length +
+    return (
+      Object.keys(this._loadDirtyMap('daughter')).length +
       (this.isTestProfileSyncEnabled() ? Object.keys(this._loadDirtyMap('test')).length : 0) +
-      this._loadWeeklyBatches().length;
+      (getDirtyProfileTrapHistory('daughter') ? 1 : 0) +
+      (this.isTestProfileSyncEnabled() && getDirtyProfileTrapHistory('test') ? 1 : 0) +
+      this._loadWeeklyBatches().length
+    );
   }
 
   _recordSyncSuccess() {

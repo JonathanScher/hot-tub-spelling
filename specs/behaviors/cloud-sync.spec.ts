@@ -12,7 +12,11 @@ import {
   saveWords,
   clearMemoryStorage,
   getDefaultStarterWords,
-  normalizeWordRecord
+  normalizeWordRecord,
+  recordTrapError,
+  getProfileTrapHistory,
+  getPlausibleDistractors,
+  resetProfileProgress
 } from '../../js/srs.js';
 
 describe('Firebase Cloud Sync, Offline Queue & Auth Gate (Executable Specification for sync.js & auth.js)', () => {
@@ -200,6 +204,118 @@ describe('Firebase Cloud Sync, Offline Queue & Auth Gate (Executable Specificati
       expect(mockFirestoreData.size).toBeGreaterThan(0);
       expect(mockFirestoreData.has('words/câlin')).toBe(true);
       expect(mockFirestoreData.has('words/sans')).toBe(true);
+    });
+
+    it('synchronizes and persists personal performance (profile trapHistory error weights from Issue #7) in Firebase across sessions', async () => {
+      // GIVEN authenticated family user on Device A
+      setMockAuthUser({
+        uid: 'user_123',
+        email: 'scher.jonathan@gmail.com',
+        displayName: 'Jonathan Scher'
+      });
+      await authManager.signInWithGoogle();
+
+      // AND the learner makes errors on specific trap categories in daughter profile during a gameplay session
+      recordTrapError('silent finals', { profileId: 'daughter' });
+      recordTrapError('silent finals', { profileId: 'daughter' });
+      recordTrapError('b/d/p/q flips', { profileId: 'daughter' });
+
+      // WHEN synchronizing with Firebase Cloud
+      const syncResult = await syncManager.syncNow();
+      expect(syncResult.ok).toBe(true);
+
+      // THEN personal performance error history is saved to Firebase Cloud Firestore metadata/app_state
+      expect(mockFirestoreData.has('metadata/app_state')).toBe(true);
+      const appStateData = mockFirestoreData.get('metadata/app_state');
+      const remoteTrapHistory = appStateData.profiles?.daughter?.trapHistory || appStateData.trapHistory;
+      expect(remoteTrapHistory).toBeDefined();
+      expect(remoteTrapHistory['silent finals'] || remoteTrapHistory['silent_finals']).toBe(2);
+      expect(remoteTrapHistory['b/d/p/q flips'] || remoteTrapHistory['bd_flips']).toBe(1);
+
+      // AND WHEN starting a new session on a second device / fresh storage where local cache is cleared
+      localStorage.clear();
+      clearMemoryStorage();
+      expect(getProfileTrapHistory('daughter')).toEqual({});
+
+      // AND the new session connects and syncs with Firebase
+      await syncManager.syncNow();
+
+      // THEN the learner's personal performance is restored between sessions from Firebase
+      const restoredTrapHistory = getProfileTrapHistory('daughter');
+      expect(restoredTrapHistory['silent finals'] || restoredTrapHistory['silent_finals']).toBe(2);
+      expect(restoredTrapHistory['b/d/p/q flips'] || restoredTrapHistory['bd_flips']).toBe(1);
+
+      // AND adaptive distractor generation on the new session prioritizes the restored blind spots
+      const pool = getPlausibleDistractors('d', 'grand', [{ word: 'grand' }], 4);
+      const SILENT_TRAPS = new Set(['t', 'd', 's', 'x', 'p', 'g', 'c', 'z', 'e']);
+      const silentCount = pool.filter((ch) => SILENT_TRAPS.has(ch)).length;
+      expect(silentCount).toBeGreaterThan(0);
+    });
+
+    it('enforces Safe Test Sandbox for personal performance: test profile trap errors do NOT push to cloud by default, but sync namespaced when enabled', async () => {
+      // GIVEN authenticated family user with test sync disabled
+      setMockAuthUser({
+        uid: 'user_123',
+        email: 'scher.jonathan@gmail.com'
+      });
+      await authManager.signInWithGoogle();
+      syncManager.setTestProfileSyncEnabled(false);
+
+      // Seed daughter trap history in Firestore
+      recordTrapError('silent finals', { profileId: 'daughter' });
+      await syncManager.syncNow();
+      expect(mockFirestoreData.has('metadata/app_state')).toBe(true);
+      const appStateBefore = mockFirestoreData.get('metadata/app_state');
+      expect(appStateBefore.profiles?.daughter?.trapHistory['silent finals']).toBe(1);
+
+      // WHEN learner practices in test profile and makes mistakes
+      recordTrapError('b/d/p/q flips', { profileId: 'test' });
+      await syncManager.syncNow();
+
+      // THEN root and daughter data are untouched, and test trap history is NOT pushed
+      const appStateAfter = mockFirestoreData.get('metadata/app_state');
+      expect(appStateAfter.profiles?.daughter?.trapHistory['silent finals']).toBe(1);
+      expect(appStateAfter.profiles?.test).toBeUndefined();
+
+      // WHEN test profile sync is enabled and synced
+      syncManager.setTestProfileSyncEnabled(true);
+      recordTrapError('nasal vowels', { profileId: 'test' });
+      await syncManager.syncNow();
+
+      // THEN test profile trap errors are synced safely namespaced under profiles.test
+      const appStateWithTest = mockFirestoreData.get('metadata/app_state');
+      expect(appStateWithTest.profiles?.test?.trapHistory).toBeDefined();
+      expect(appStateWithTest.profiles?.test?.trapHistory['nasal vowels']).toBe(1);
+      // Daughter data remains strictly preserved
+      expect(appStateWithTest.profiles?.daughter?.trapHistory['silent finals']).toBe(1);
+    });
+
+    it('synchronizes profile progress reset so old personal error history is cleared in Firebase and does not resurrect', async () => {
+      // GIVEN authenticated user with existing personal errors in Firebase
+      setMockAuthUser({
+        uid: 'user_123',
+        email: 'scher.jonathan@gmail.com'
+      });
+      await authManager.signInWithGoogle();
+      recordTrapError('silent finals', { profileId: 'daughter' });
+      await syncManager.syncNow();
+
+      const appState = mockFirestoreData.get('metadata/app_state');
+      expect(appState.profiles?.daughter?.trapHistory['silent finals']).toBe(1);
+
+      // WHEN resetting daughter progress in parent mode
+      resetProfileProgress('daughter');
+      await syncManager.syncNow();
+
+      // THEN remote Firebase trap history is reset to empty
+      const appStateAfterReset = mockFirestoreData.get('metadata/app_state');
+      expect(appStateAfterReset.profiles?.daughter?.trapHistory).toEqual({});
+
+      // AND in a new session on another device, trap history remains cleared
+      localStorage.clear();
+      clearMemoryStorage();
+      await syncManager.syncNow();
+      expect(getProfileTrapHistory('daughter')).toEqual({});
     });
   });
 });

@@ -149,10 +149,31 @@ export async function getDocs(query: any) {
   };
 }
 
+function deepMerge(target: any, source: any): any {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) {
+    return source;
+  }
+  const result = { ...(target || {}) };
+  for (const key of Object.keys(source)) {
+    const sVal = source[key];
+    const tVal = result[key];
+    if (sVal && typeof sVal === 'object' && !Array.isArray(sVal)) {
+      if (Object.keys(sVal).length === 0) {
+        result[key] = {};
+      } else {
+        result[key] = deepMerge(tVal, sVal);
+      }
+    } else {
+      result[key] = sVal;
+    }
+  }
+  return result;
+}
+
 export async function setDoc(docRef: any, data: any, options?: { merge?: boolean }) {
   if (options?.merge && mockFirestoreData.has(docRef.path)) {
     const existing = mockFirestoreData.get(docRef.path) || {};
-    mockFirestoreData.set(docRef.path, { ...existing, ...data });
+    mockFirestoreData.set(docRef.path, deepMerge(existing, JSON.parse(JSON.stringify(data))));
   } else {
     mockFirestoreData.set(docRef.path, JSON.parse(JSON.stringify(data)));
   }
@@ -171,7 +192,7 @@ export function writeBatch(_db: any) {
       operations.push(() => {
         if (options?.merge && mockFirestoreData.has(docRef.path)) {
           const existing = mockFirestoreData.get(docRef.path) || {};
-          mockFirestoreData.set(docRef.path, { ...existing, ...data });
+          mockFirestoreData.set(docRef.path, deepMerge(existing, JSON.parse(JSON.stringify(data))));
         } else {
           mockFirestoreData.set(docRef.path, JSON.parse(JSON.stringify(data)));
         }

@@ -18,6 +18,8 @@ export const PROFILES_METADATA_KEY = 'hottub_profiles_meta_v1';
 export const ACTIVE_PROFILE_KEY = 'hottub_active_profile_v1';
 export const PROFILE_STATS_STORAGE_PREFIX = 'hottub_srs_profile_stats_v1_';
 export const COSMETIC_STARS_PREFIX = 'hottub_stars_';
+export const DIRTY_TRAP_HISTORY_STORAGE_KEY = 'hottub_dirty_trap_history_v1';
+export const TEST_DIRTY_TRAP_HISTORY_STORAGE_KEY = 'hottub_dirty_trap_history_v1_test';
 
 /**
  * @typedef {object} LearnerProfile
@@ -97,6 +99,15 @@ export function getProfiles(customStorage) {
  * @param {StorageLike} [customStorage]
  * @returns {string}
  */
+export function saveProfiles(profiles, customStorage) {
+  const store = getStorage(customStorage);
+  try {
+    store.setItem(PROFILES_METADATA_KEY, JSON.stringify(profiles));
+  } catch (err) {
+    console.warn('Failed to save profiles:', err);
+  }
+}
+
 export function getActiveProfileId(customStorage) {
   const store = getStorage(customStorage);
   try {
@@ -224,6 +235,8 @@ export function resetProfileProgress(profileId, customStorage, todayIso) {
       // Ignore
     }
   }
+
+  markProfileTrapHistoryDirty(cleanId, {}, store);
 
   if (cleanId === 'test') {
     if (typeof store.removeItem === 'function') {
@@ -354,7 +367,152 @@ export function recordTrapError(categoryOrProfileId, profileIdOrCategoryOrOption
     console.warn('Failed to persist profile trapHistory:', err);
   }
 
+  markProfileTrapHistoryDirty(resolvedProfileId, prof.trapHistory, store);
+
   return { ...prof.trapHistory };
+}
+
+/**
+ * Marks a profile's trap error history as dirty so it is pushed to Cloud Firestore.
+ * @param {string} profileId
+ * @param {Record<string, number>} trapHistory
+ * @param {StorageLike} [customStorage]
+ */
+export function markProfileTrapHistoryDirty(profileId, trapHistory, customStorage) {
+  const store = getStorage(customStorage);
+  const cleanId = String(profileId || 'daughter').trim();
+  const storageKey = cleanId === 'test' ? TEST_DIRTY_TRAP_HISTORY_STORAGE_KEY : DIRTY_TRAP_HISTORY_STORAGE_KEY;
+  try {
+    store.setItem(
+      storageKey,
+      JSON.stringify({
+        profileId: cleanId,
+        trapHistory: { ...(trapHistory || {}) },
+        updated_at: new Date().toISOString()
+      })
+    );
+  } catch {
+    // Ignore storage quota error
+  }
+}
+
+/**
+ * Retrieves the pending dirty trap error history for a profile.
+ * @param {string} profileId
+ * @param {StorageLike} [customStorage]
+ * @returns {{ profileId: string, trapHistory: Record<string, number>, updated_at: string } | null}
+ */
+export function getDirtyProfileTrapHistory(profileId, customStorage) {
+  const store = getStorage(customStorage);
+  const cleanId = String(profileId || 'daughter').trim();
+  const storageKey = cleanId === 'test' ? TEST_DIRTY_TRAP_HISTORY_STORAGE_KEY : DIRTY_TRAP_HISTORY_STORAGE_KEY;
+  try {
+    const raw = store.getItem(storageKey);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Clears the pending dirty trap error history for a profile after sync.
+ * @param {string} profileId
+ * @param {StorageLike} [customStorage]
+ */
+export function clearDirtyProfileTrapHistory(profileId, customStorage) {
+  const store = getStorage(customStorage);
+  const cleanId = String(profileId || 'daughter').trim();
+  const storageKey = cleanId === 'test' ? TEST_DIRTY_TRAP_HISTORY_STORAGE_KEY : DIRTY_TRAP_HISTORY_STORAGE_KEY;
+  try {
+    if (typeof store.removeItem === 'function') {
+      store.removeItem(storageKey);
+    } else {
+      store.setItem(storageKey, '');
+    }
+  } catch {
+    // Ignore
+  }
+}
+
+/**
+ * Normalizes a trapHistory map ensuring canonical names and aliases.
+ * @param {Record<string, any>} history
+ * @returns {Record<string, number>}
+ */
+export function normalizeTrapHistory(history) {
+  if (!history || typeof history !== 'object') return {};
+  const normalized = {};
+  for (const [k, v] of Object.entries(history)) {
+    const count = parseInt(String(v), 10);
+    if (!Number.isFinite(count) || count < 0) continue;
+    const rawCat = String(k).trim();
+    if (!rawCat) continue;
+    const canonical = normalizeCategoryName(rawCat);
+    normalized[rawCat] = Math.max(normalized[rawCat] || 0, count);
+    normalized[canonical] = Math.max(normalized[canonical] || 0, count);
+    const snakeAlias = canonical.replace(/\s+/g, '_').replace(/[\/]/g, '');
+    normalized[snakeAlias] = Math.max(normalized[snakeAlias] || 0, count);
+  }
+  return normalized;
+}
+
+/**
+ * Merges profile metadata & personal performance (trapHistory) from Firebase Cloud into local storage.
+ * @param {any} remoteMetaData
+ * @param {StorageLike} [customStorage]
+ * @returns {LearnerProfile[]}
+ */
+export function mergeProfilesFromCloud(remoteMetaData, customStorage) {
+  const store = getStorage(customStorage);
+  if (!remoteMetaData || typeof remoteMetaData !== 'object') {
+    return getProfiles(store);
+  }
+
+  const profiles = getProfiles(store);
+
+  // 1. Daughter Profile
+  const dProf = profiles.find((p) => p.id === 'daughter');
+  if (dProf) {
+    const remoteDaughter = (remoteMetaData.profiles && remoteMetaData.profiles.daughter) || null;
+    const remoteTrap =
+      remoteDaughter && remoteDaughter.trapHistory !== undefined
+        ? remoteDaughter.trapHistory
+        : remoteMetaData.trapHistory !== undefined
+        ? remoteMetaData.trapHistory
+        : null;
+
+    if (remoteTrap !== null && typeof remoteTrap === 'object') {
+      const dirtyEntry = getDirtyProfileTrapHistory('daughter', store);
+      if (dirtyEntry && dirtyEntry.trapHistory && Object.keys(dirtyEntry.trapHistory).length > 0) {
+        // Local has pending dirty trap errors that will be flushed to cloud: merge max
+        const merged = normalizeTrapHistory({ ...remoteTrap, ...dProf.trapHistory });
+        for (const [cat, val] of Object.entries(merged)) {
+          merged[cat] = Math.max(val, dProf.trapHistory[cat] || 0, remoteTrap[cat] || 0);
+        }
+        dProf.trapHistory = merged;
+      } else {
+        dProf.trapHistory = normalizeTrapHistory(remoteTrap);
+      }
+    }
+  }
+
+  // 2. Test Profile (if present in remote)
+  const tProf = profiles.find((p) => p.id === 'test');
+  if (tProf && remoteMetaData.profiles && remoteMetaData.profiles.test) {
+    const remoteTest = remoteMetaData.profiles.test;
+    if (remoteTest && remoteTest.trapHistory !== undefined && typeof remoteTest.trapHistory === 'object') {
+      const dirtyTest = getDirtyProfileTrapHistory('test', store);
+      if (dirtyTest && dirtyTest.trapHistory && Object.keys(dirtyTest.trapHistory).length > 0) {
+        const mergedTest = normalizeTrapHistory({ ...remoteTest.trapHistory, ...tProf.trapHistory });
+        tProf.trapHistory = mergedTest;
+      } else {
+        tProf.trapHistory = normalizeTrapHistory(remoteTest.trapHistory);
+      }
+    }
+  }
+
+  saveProfiles(profiles, store);
+  return profiles;
 }
 
 /**

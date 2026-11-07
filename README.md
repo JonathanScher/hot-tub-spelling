@@ -68,7 +68,7 @@ service cloud.firestore {
 - **Zero-Error Mastery & Leitner Boxes (1–5):** Words with any error or hint are re-queued at the end of the current session until spelled once with zero errors. First-attempt accuracy advances long-term Leitner intervals (`+1d`, `+2d`, `+4d`, `+7d`, `+14d`) or resets to Box 1 (`+1d`).
 - **Learner Profiles & Safe Testing Sandbox (`js/srs.js`, `js/sync.js`):**
   - **Shared Curriculum:** Words added or edited in Parent Mode are available to all profiles.
-  - **Strict SRS Isolation:** Leitner box progression (1–5), review due dates, streaks, and attempt counts are isolated per profile.
+  - **Strict SRS Isolation & Personal Performance Sync:** Leitner box progression (1–5), review due dates, streaks, attempt counts, and personal error weights (`trapHistory` for adaptive distractor generation) are isolated per profile and sync to Cloud Firestore so personal performance stays across sessions and devices.
   - **1-Click Profile Switcher:** Switch between `👧 Zoé` (Primary Learner) and `🧪 Test / Sandbox` directly on the Welcome screen or in the Parent Dashboard.
   - **Zero-Touch Zoé Protection:** Playing in the `Test` profile never touches Zoé's review schedule or stats.
   - **Sandbox Mode by Default:** In `Test` profile, gameplay runs in safe local sandbox mode without writing to Cloud Firestore. If cloud sync is enabled for testing, writes are namespaced under `profiles.test` via `{ merge: true }` without touching root documents.

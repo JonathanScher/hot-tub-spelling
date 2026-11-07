@@ -591,7 +591,10 @@ export class HotTubGame {
     if (!res.handled || res.correct) return;
 
     if (res.trapCategory) {
-      recordTrapError(res.trapCategory);
+      const updatedHistory = recordTrapError(res.trapCategory);
+      if (this.options && typeof this.options.onTrapError === 'function') {
+        this.options.onTrapError(res.trapCategory, updatedHistory);
+      }
     }
 
     soundEngine.playWrongFizzle();
