@@ -434,6 +434,253 @@ class SoundSynthesizer {
     osc.stop(now + 0.06);
   }
 
+  /**
+   * Level Select — Cozy Bathtub: Warm water splash + happy cat purr.
+   */
+  playLevelSelectBathtub() {
+    if (!this._ensureReady()) return;
+
+    const now = this.ctx.currentTime;
+    // 1. Warm water splash
+    this.playWaterSplash();
+
+    // 2. Happy cat purr (gentle warm low trill)
+    const purrDur = 0.48;
+    const carrier = this.ctx.createOscillator();
+    const purrFilter = this.ctx.createBiquadFilter();
+    const purrGain = this.ctx.createGain();
+
+    carrier.type = 'triangle';
+    carrier.frequency.setValueAtTime(118, now + 0.08);
+    carrier.frequency.linearRampToValueAtTime(142, now + 0.32);
+    carrier.frequency.linearRampToValueAtTime(112, now + 0.08 + purrDur);
+
+    purrFilter.type = 'lowpass';
+    purrFilter.frequency.setValueAtTime(340, now + 0.08);
+
+    purrGain.gain.setValueAtTime(0.001, now + 0.08);
+    purrGain.gain.linearRampToValueAtTime(0.18, now + 0.16);
+    purrGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08 + purrDur);
+
+    carrier.connect(purrFilter);
+    purrFilter.connect(purrGain);
+    purrGain.connect(this.masterGain);
+    carrier.start(now + 0.08);
+    carrier.stop(now + 0.1 + purrDur);
+  }
+
+  /**
+   * Level Select — Chest Opening: Heavy wooden creak + metallic coin chime.
+   */
+  playLevelSelectChest() {
+    if (!this._ensureReady()) return;
+
+    const now = this.ctx.currentTime;
+
+    // 1. Heavy wooden lid creak
+    const creakOsc = this.ctx.createOscillator();
+    const creakFilter = this.ctx.createBiquadFilter();
+    const creakGain = this.ctx.createGain();
+
+    creakOsc.type = 'sawtooth';
+    creakOsc.frequency.setValueAtTime(135, now);
+    creakOsc.frequency.linearRampToValueAtTime(185, now + 0.11);
+    creakOsc.frequency.exponentialRampToValueAtTime(98, now + 0.22);
+
+    creakFilter.type = 'lowpass';
+    creakFilter.frequency.setValueAtTime(380, now);
+
+    creakGain.gain.setValueAtTime(0.001, now);
+    creakGain.gain.linearRampToValueAtTime(0.16, now + 0.025);
+    creakGain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+
+    creakOsc.connect(creakFilter);
+    creakFilter.connect(creakGain);
+    creakGain.connect(this.masterGain);
+    creakOsc.start(now);
+    creakOsc.stop(now + 0.25);
+
+    // 2. Metallic gold coin chime arpeggio
+    const coinNotes = [1046.5, 1318.51, 1567.98, 2093.0];
+    coinNotes.forEach((freq, idx) => {
+      const start = now + 0.1 + idx * 0.055;
+      this._playWarmBellNote(freq, start, 0.36, 0.19);
+    });
+  }
+
+  /**
+   * Mode Select (3 vs. 10 Ducks):
+   * - count === 3: Quick single rubber duck "quack".
+   * - count === 10: Rapid, funny chorus of three "quack-quack-quacks".
+   * @param {number} [count=3]
+   */
+  playModeQuack(count = 3) {
+    if (!this._ensureReady()) return;
+
+    const now = this.ctx.currentTime;
+    const quacks = count >= 10
+      ? [
+          { delay: 0, baseFreq: 540, peakFreq: 920 },
+          { delay: 0.11, baseFreq: 610, peakFreq: 1020 },
+          { delay: 0.22, baseFreq: 500, peakFreq: 980 }
+        ]
+      : [{ delay: 0, baseFreq: 560, peakFreq: 940 }];
+
+    for (const q of quacks) {
+      const t = now + q.delay;
+      const osc = this.ctx.createOscillator();
+      const filter = this.ctx.createBiquadFilter();
+      const gain = this.ctx.createGain();
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(q.baseFreq, t);
+      osc.frequency.linearRampToValueAtTime(q.peakFreq, t + 0.055);
+      osc.frequency.linearRampToValueAtTime(q.baseFreq * 1.35, t + 0.12);
+
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(1250, t);
+      filter.Q.value = 3.0;
+
+      gain.gain.setValueAtTime(0.001, t);
+      gain.gain.linearRampToValueAtTime(0.3, t + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(t);
+      osc.stop(t + 0.15);
+    }
+  }
+
+  /**
+   * Tracking Toggle (Sleep Mask):
+   * - maskOn === true ("Just for Fun"): Soft fabric swoosh + quiet cozy snore.
+   * - maskOn === false ("Counting: ON"): Fabric lift swoosh + gentle wake note.
+   * @param {boolean} [maskOn=true]
+   */
+  playSleepMaskToggle(maskOn = true) {
+    if (!this._ensureReady()) return;
+
+    const now = this.ctx.currentTime;
+
+    // 1. Soft fabric swoosh
+    if (this.noiseBuffer) {
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = this.noiseBuffer;
+
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(maskOn ? 950 : 620, now);
+      filter.frequency.exponentialRampToValueAtTime(maskOn ? 480 : 1100, now + 0.16);
+      filter.Q.value = 1.6;
+
+      const nGain = this.ctx.createGain();
+      nGain.gain.setValueAtTime(0.001, now);
+      nGain.gain.linearRampToValueAtTime(0.16, now + 0.03);
+      nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+
+      noise.connect(filter);
+      filter.connect(nGain);
+      nGain.connect(this.masterGain);
+      noise.start(now);
+      noise.stop(now + 0.19);
+    }
+
+    if (maskOn) {
+      // 2. Quiet cozy snore sigh
+      const snoreOsc = this.ctx.createOscillator();
+      const snoreFilter = this.ctx.createBiquadFilter();
+      const snoreGain = this.ctx.createGain();
+
+      snoreOsc.type = 'sine';
+      snoreOsc.frequency.setValueAtTime(165, now + 0.14);
+      snoreOsc.frequency.exponentialRampToValueAtTime(110, now + 0.46);
+
+      snoreFilter.type = 'lowpass';
+      snoreFilter.frequency.setValueAtTime(280, now + 0.14);
+
+      snoreGain.gain.setValueAtTime(0.001, now + 0.14);
+      snoreGain.gain.linearRampToValueAtTime(0.14, now + 0.22);
+      snoreGain.gain.exponentialRampToValueAtTime(0.001, now + 0.48);
+
+      snoreOsc.connect(snoreFilter);
+      snoreFilter.connect(snoreGain);
+      snoreGain.connect(this.masterGain);
+      snoreOsc.start(now + 0.14);
+      snoreOsc.stop(now + 0.5);
+    } else {
+      // Wake up chime
+      this._playWarmBellNote(587.33, now + 0.08, 0.25, 0.16);
+      this._playWarmBellNote(783.99, now + 0.15, 0.3, 0.18);
+    }
+  }
+
+  /**
+   * Start Button: Giant soap bubble pop + bright harp glissando.
+   */
+  playStartHarpGlissando() {
+    if (!this._ensureReady()) return;
+
+    this.playBubblePop(4);
+
+    const now = this.ctx.currentTime;
+    const harpNotes = [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5, 1174.66, 1318.51];
+    harpNotes.forEach((freq, idx) => {
+      const start = now + 0.04 + idx * 0.042;
+      this._playWarmBellNote(freq, start, idx === harpNotes.length - 1 ? 0.65 : 0.36, 0.18);
+    });
+  }
+
+  /**
+   * Login Gate: Gentle happy cat meow when waking up the sleeping cat door.
+   */
+  playCatWakeMeow() {
+    if (!this._ensureReady()) return;
+
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(440, now);
+    osc.frequency.exponentialRampToValueAtTime(740, now + 0.14);
+    osc.frequency.exponentialRampToValueAtTime(520, now + 0.36);
+
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.22, now + 0.04);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(now);
+    osc.stop(now + 0.4);
+  }
+
+  /**
+   * Idle State: Very faint, slow bubble pop every 10 seconds.
+   */
+  playFaintAmbientBubble() {
+    if (!this._ensureReady()) return;
+
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(360, now);
+    osc.frequency.exponentialRampToValueAtTime(680, now + 0.08);
+
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.045, now + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(now);
+    osc.stop(now + 0.12);
+  }
+
   _playWarmBellNote(freq, startTime, duration, peakGain) {
     const osc = this.ctx.createOscillator();
     const overtone = this.ctx.createOscillator();
@@ -467,3 +714,4 @@ class SoundSynthesizer {
 }
 
 export const soundEngine = new SoundSynthesizer();
+

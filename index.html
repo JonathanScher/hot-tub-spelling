@@ -245,64 +245,315 @@
     <!-- Overlay Layer for Flying Letters into Slots -->
     <div id="flying-layer" class="flying-layer" aria-hidden="true"></div>
 
-    <!-- Session Start Overlay (Unlocks Web Audio API & Speech on Mobile / Amazon Fire Tablet) -->
-    <div id="start-overlay" class="screen-overlay is-active" role="dialog" aria-modal="true" aria-labelledby="start-title">
-      <div class="welcome-card">
-        <div class="welcome-mascot-badge">
-          <img
-            src="assets/mascot-happy.webp"
-            alt="Cozy capybara bath friend"
-            class="welcome-mascot-img"
-            onerror="this.style.display='none'"
-          />
+    <!-- Landing Page Overlay (State 1: Login Gate | State 2: Play Hub) -->
+    <div id="start-overlay" class="screen-overlay landing-hub-overlay is-active" role="dialog" aria-modal="true" aria-labelledby="start-title">
+      <!-- STATE 1: Unauthenticated View (The Login Gate — Sleeping Orange Cat Blocking Wooden Door) -->
+      <div id="auth-gate-box" class="login-gate-stage" hidden>
+        <div class="login-brand-header">
+          <span class="hub-brand-title login-brand-title" aria-hidden="true">
+            <span class="brand-hot">Hot</span> <span class="brand-tub">Tub</span> <span class="brand-heart">♡</span>
+          </span>
         </div>
-        <span class="storybook-kicker" id="start-week-pill">Week 8 • Cozy Bathhouse</span>
-        <h1 id="start-title" class="welcome-title">Cozy Tub Spelling</h1>
-        <p class="welcome-subtitle" id="start-subtitle">
-          Listen to each word and pop the floating lowercase bubbles in order!
-        </p>
 
-        <!-- Learner Profile Switcher -->
+        <div id="login-cat-door" class="login-cat-door">
+          <div class="cat-sleep-zzz" aria-hidden="true">
+            <span class="zzz-1">z</span>
+            <span class="zzz-2">Z</span>
+            <span class="zzz-3">z</span>
+          </div>
+          <div class="login-cat-frame">
+            <img
+              src="assets/login-sleeping-cat.jpg"
+              alt="Sleeping orange cat resting on a wooden door board"
+              class="login-cat-img cat-breathing"
+              onerror="this.style.display='none'"
+            />
+          </div>
+          <div class="google-signin-btn-wrap">
+            <button type="button" id="btn-google-signin" class="google-door-btn">
+              <span class="google-g-badge" aria-hidden="true">G</span>
+              <span>Sign in with Google</span>
+            </button>
+          </div>
+          <p id="auth-error-msg" class="auth-error-msg" hidden></p>
+        </div>
+      </div>
+
+      <!-- STATE 2: Authenticated View (The Play Hub) -->
+      <div id="play-hub-view" class="play-hub-view">
+        <!-- Row 1: Top Utility Bar (Quiet Corner Utilities + Hand-Drawn Title) -->
+        <div class="hub-topbar">
+          <!-- Top-Left: Active Week Selector -->
+          <div class="hub-week-dropdown-wrap" id="hub-week-dropdown-wrap">
+            <button
+              type="button"
+              id="btn-week-selector"
+              class="hub-wood-pill hub-week-btn"
+              aria-haspopup="true"
+              aria-expanded="false"
+              aria-label="Select active week"
+            >
+              <span class="hub-pill-icon" aria-hidden="true">📅</span>
+              <span id="start-week-pill" class="hub-week-text">Week 8</span>
+              <span class="hub-week-caret" aria-hidden="true">▾</span>
+            </button>
+
+            <!-- Numbered Wooden Tiles Grid Popover -->
+            <div id="week-selector-popover" class="week-selector-popover" role="menu" aria-label="Choose active week" hidden>
+              <div class="week-popover-header">Choose Week</div>
+              <div id="week-tiles-grid" class="week-tiles-grid"></div>
+            </div>
+          </div>
+
+          <!-- Centerpiece Title: Hand-Drawn "Hot Tub ♡" -->
+          <h1 id="start-title" class="hub-brand-title">
+            <span class="brand-hot">Hot</span> <span class="brand-tub">Tub</span> <span class="brand-heart">♡</span>
+          </h1>
+
+          <!-- Top-Right: Progress Link ("My Ducks") -->
+          <a
+            href="/progress"
+            id="btn-my-ducks"
+            class="hub-wood-pill hub-ducks-btn"
+            role="button"
+            aria-label="My Ducks progress shelf"
+          >
+            <span class="hub-pill-icon" aria-hidden="true">🏆</span>
+            <span class="hub-ducks-text">My Ducks</span>
+          </a>
+        </div>
+
+        <!-- Row 2: Center Stage (Level Select Cards & Rubber Duck Mode Toggle) -->
+        <div class="hub-center-stage">
+          <!-- Binary Visual Level Select: Cozy Bathtub vs. Chest Opening -->
+          <div id="level-select-group" class="hub-level-cards" role="radiogroup" aria-label="Select game level">
+            <button
+              type="button"
+              id="card-level-bathtub"
+              class="level-polaroid-card is-selected"
+              data-level="bathtub"
+              role="radio"
+              aria-checked="true"
+              aria-label="Cozy Bathtub"
+            >
+              <span class="level-bubble-aura" aria-hidden="true"></span>
+              <span class="level-card-label">Cozy Bathtub</span>
+              <span class="level-card-art">
+                <img
+                  src="assets/card-cozy-bathtub.jpg"
+                  alt="Orange cat relaxing in a cozy bathtub"
+                  class="level-card-img cat-breathing"
+                  onerror="this.style.display='none'"
+                />
+              </span>
+              <span class="level-card-pips" aria-hidden="true">
+                <span class="level-pip is-hollow"></span>
+                <span class="level-pip"></span>
+                <span class="level-pip"></span>
+                <span class="level-pip"></span>
+                <span class="level-pip"></span>
+              </span>
+            </button>
+
+            <button
+              type="button"
+              id="card-level-chest"
+              class="level-polaroid-card"
+              data-level="chest"
+              role="radio"
+              aria-checked="false"
+              aria-label="Chest Opening"
+            >
+              <span class="level-bubble-aura" aria-hidden="true"></span>
+              <span class="level-card-label">Chest Opening</span>
+              <span class="level-card-art">
+                <img
+                  src="assets/card-chest-opening.jpg"
+                  alt="Glowing wooden treasure chest filled with gold coins"
+                  class="level-card-img"
+                  onerror="this.style.display='none'"
+                />
+              </span>
+              <span class="level-card-pips" aria-hidden="true">
+                <span class="level-pip"></span>
+                <span class="level-pip"></span>
+                <span class="level-pip"></span>
+                <span class="level-pip"></span>
+                <span class="level-pip"></span>
+              </span>
+            </button>
+          </div>
+
+          <!-- Segmented Wooden Pill Mode Toggle: 3 Rubber Ducks ("Quick Splash") vs. 10 Rubber Ducks ("Big Soak") -->
+          <div id="mode-pill-toggle" class="hub-mode-pill" role="radiogroup" aria-label="Select number of words">
+            <button
+              type="button"
+              id="btn-mode-3"
+              class="mode-segment-btn is-selected"
+              data-mode="3"
+              role="radio"
+              aria-checked="true"
+              aria-label="Quick Splash: 3 Words"
+            >
+              <span class="mode-ducks-row" aria-hidden="true">
+                <svg class="mini-duck-svg" viewBox="0 0 32 32"><path d="M5 21 C5 15, 11 13, 19 15 C23 16, 26 18, 26 22 C26 25, 23 27, 17 27 C11 27, 5 25, 5 21 Z" fill="#FAD246" stroke="#4A2E1B" stroke-width="2"/><circle cx="20" cy="11" r="6" fill="#FAD246" stroke="#4A2E1B" stroke-width="2"/><path d="M25 11 L30 13 L25 14 Z" fill="#F07C4A" stroke="#4A2E1B" stroke-width="1.6"/><circle cx="21.5" cy="10" r="1.4" fill="#2C1B10"/></svg>
+                <svg class="mini-duck-svg" viewBox="0 0 32 32"><path d="M5 21 C5 15, 11 13, 19 15 C23 16, 26 18, 26 22 C26 25, 23 27, 17 27 C11 27, 5 25, 5 21 Z" fill="#FAD246" stroke="#4A2E1B" stroke-width="2"/><circle cx="20" cy="11" r="6" fill="#FAD246" stroke="#4A2E1B" stroke-width="2"/><path d="M25 11 L30 13 L25 14 Z" fill="#F07C4A" stroke="#4A2E1B" stroke-width="1.6"/><circle cx="21.5" cy="10" r="1.4" fill="#2C1B10"/></svg>
+                <svg class="mini-duck-svg" viewBox="0 0 32 32"><path d="M5 21 C5 15, 11 13, 19 15 C23 16, 26 18, 26 22 C26 25, 23 27, 17 27 C11 27, 5 25, 5 21 Z" fill="#FAD246" stroke="#4A2E1B" stroke-width="2"/><circle cx="20" cy="11" r="6" fill="#FAD246" stroke="#4A2E1B" stroke-width="2"/><path d="M25 11 L30 13 L25 14 Z" fill="#F07C4A" stroke="#4A2E1B" stroke-width="1.6"/><circle cx="21.5" cy="10" r="1.4" fill="#2C1B10"/></svg>
+              </span>
+              <span class="mode-words-text">3 Words</span>
+            </button>
+
+            <button
+              type="button"
+              id="btn-mode-10"
+              class="mode-segment-btn"
+              data-mode="10"
+              role="radio"
+              aria-checked="false"
+              aria-label="Big Soak: 10 Words"
+            >
+              <span class="mode-ducks-row" aria-hidden="true">
+                <svg class="mini-duck-svg is-big-duck" viewBox="0 0 32 32"><path d="M5 21 C5 15, 11 13, 19 15 C23 16, 26 18, 26 22 C26 25, 23 27, 17 27 C11 27, 5 25, 5 21 Z" fill="#FAD246" stroke="#4A2E1B" stroke-width="2"/><circle cx="20" cy="11" r="6" fill="#FAD246" stroke="#4A2E1B" stroke-width="2"/><path d="M25 11 L30 13 L25 14 Z" fill="#F07C4A" stroke="#4A2E1B" stroke-width="1.6"/><circle cx="21.5" cy="10" r="1.4" fill="#2C1B10"/></svg>
+                <span class="mode-duck-mult">x10</span>
+              </span>
+              <span class="mode-words-text">10 Words</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Row 3: Bottom Action Zone (Floating Soap Bubble Badge + Giant PLAY CTA + Sleep Mask Tracking Toggle) -->
+        <div class="hub-bottom-zone">
+          <div class="hub-start-cluster">
+            <!-- Words Due Today Floating Soap Bubble Badge -->
+            <div id="words-due-bubble" class="words-due-bubble" aria-live="polite">
+              <span id="words-due-count" class="words-due-number">5</span>
+              <span id="words-due-sub" class="words-due-sub">to pop!</span>
+            </div>
+
+            <!-- Giant Bouncy Green PLAY Button -->
+            <button type="button" id="btn-play" class="big-play-btn hub-play-cta-btn">
+              <span class="hub-play-triangle" aria-hidden="true">▶</span>
+              <span id="btn-play-text">PLAY !</span>
+            </button>
+          </div>
+
+          <!-- Bottom-Right Corner: White Cat's Pink Sleep Mask Tracking Toggle -->
+          <div class="hub-tracking-corner">
+            <div class="tracking-caption-row">
+              <span id="tracking-caption-emoji" class="tracking-caption-emoji" aria-hidden="true">👀</span>
+              <span id="tracking-toggle-label" class="tracking-toggle-label">Counting: ON</span>
+            </div>
+            <button
+              type="button"
+              id="btn-tracking-toggle"
+              class="tracking-mask-switch"
+              role="switch"
+              aria-checked="false"
+              aria-label="Toggle Just for Fun practice mode"
+              title="Toggle between Counting: ON and Just for Fun (Secret Practice)"
+            >
+              <span class="tracking-switch-well" aria-hidden="true"></span>
+              <span class="tracking-cat-knob" aria-hidden="true">
+                <svg class="white-cat-mask-svg" viewBox="0 0 60 60">
+                  <!-- White Cat Ears -->
+                  <polygon points="10,26 14,8 26,18" fill="#FFFDF9" stroke="#4A2E1B" stroke-width="2.5" stroke-linejoin="round"/>
+                  <polygon points="13,23 16,12 23,18" fill="#F497A9"/>
+                  <polygon points="50,26 46,8 34,18" fill="#FFFDF9" stroke="#4A2E1B" stroke-width="2.5" stroke-linejoin="round"/>
+                  <polygon points="47,23 44,12 37,18" fill="#F497A9"/>
+                  <!-- White Cat Head -->
+                  <ellipse cx="30" cy="34" rx="21" ry="18" fill="#FFFDF9" stroke="#4A2E1B" stroke-width="2.5"/>
+                  <!-- Open Eyes (Shown when Tracking ON / Mask Off) -->
+                  <g class="cat-eyes-open">
+                    <circle cx="22" cy="32" r="2.7" fill="#2C1B10"/>
+                    <circle cx="22.8" cy="31" r="0.9" fill="#FFFFFF"/>
+                    <circle cx="38" cy="32" r="2.7" fill="#2C1B10"/>
+                    <circle cx="38.8" cy="31" r="0.9" fill="#FFFFFF"/>
+                  </g>
+                  <!-- Pink Sleep Mask (Slides down over eyes when Tracking OFF / "Just for Fun") -->
+                  <g class="cat-sleep-mask">
+                    <path d="M10,30 Q30,26 50,30" fill="none" stroke="#D46A84" stroke-width="2.5"/>
+                    <rect x="13" y="23" width="34" height="14" rx="7" fill="#F497A9" stroke="#4A2E1B" stroke-width="2"/>
+                    <path d="M18,30 Q22,34 26,30" fill="none" stroke="#4A2E1B" stroke-width="2" stroke-linecap="round"/>
+                    <path d="M34,30 Q38,34 42,30" fill="none" stroke="#4A2E1B" stroke-width="2" stroke-linecap="round"/>
+                  </g>
+                  <!-- Cute Pink Nose & Smile -->
+                  <polygon points="28,39 32,39 30,41.5" fill="#F497A9"/>
+                  <path d="M26,43 Q30,46 34,43" fill="none" stroke="#4A2E1B" stroke-width="2" stroke-linecap="round"/>
+                  <!-- Whiskers -->
+                  <line x1="6" y1="36" x2="14" y2="37" stroke="#4A2E1B" stroke-width="1.6" stroke-linecap="round"/>
+                  <line x1="6" y1="41" x2="14" y2="40" stroke="#4A2E1B" stroke-width="1.6" stroke-linecap="round"/>
+                  <line x1="54" y1="36" x2="46" y2="37" stroke="#4A2E1B" stroke-width="1.6" stroke-linecap="round"/>
+                  <line x1="54" y1="41" x2="46" y2="40" stroke="#4A2E1B" stroke-width="1.6" stroke-linecap="round"/>
+                </svg>
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quiet Spec-Compatible & Screen-Reader Utility State (Zero Visual Clutter) -->
+      <div class="sr-only-utility" aria-hidden="false">
+        <p id="start-subtitle">Listen to each word and pop the floating lowercase bubbles in order!</p>
         <div class="welcome-profile-section" id="welcome-profile-section">
           <span class="profile-section-label" id="profile-select-label">Active Learner Profile:</span>
-          <div id="welcome-profile-selector" class="profile-switcher-pill" role="radiogroup" aria-labelledby="profile-select-label">
-            <!-- Dynamic profile buttons: Daughter & Test -->
-          </div>
+          <div id="welcome-profile-selector" class="profile-switcher-pill" role="radiogroup" aria-labelledby="profile-select-label"></div>
           <div id="test-mode-banner" class="test-mode-banner" hidden>
             <span class="test-banner-icon">🧪</span>
             <span class="test-banner-text">Test Profile Active — Zoé's progress &amp; schedule are 100% safe!</span>
           </div>
         </div>
-
-        <!-- Family Google Sign-In Gate (Shown until signed in on this device) -->
-        <div id="auth-gate-box" class="auth-gate-box" hidden>
-          <p class="auth-gate-prompt">Sign in once with an authorized family Google account to unlock &amp; sync:</p>
-          <div class="google-signin-btn-wrap">
-            <button type="button" id="btn-google-signin" class="primary-pastel-btn">
-              Sign in with Google
-            </button>
-          </div>
-          <p id="auth-error-msg" class="auth-error-msg" hidden></p>
-        </div>
-
         <div class="session-mode-buttons" id="session-mode-buttons">
-          <button type="button" id="btn-play" class="big-play-btn">
-            <span class="play-btn-bubble" aria-hidden="true">▶</span>
-            <span id="btn-play-text">Play</span>
-          </button>
-          <button type="button" id="btn-quick-splash" class="big-play-btn quick-splash-btn" title="Quick 3-word session for low-energy days (due words only)">
-            <span class="play-btn-bubble" aria-hidden="true">⚡</span>
+          <button type="button" id="btn-quick-splash" class="big-play-btn quick-splash-btn">
             <span id="btn-quick-splash-text">Quick Splash (3 Words)</span>
           </button>
         </div>
-
         <div id="welcome-user-pill" class="auth-user-pill" hidden>
           <img id="welcome-user-avatar" class="auth-user-avatar" alt="" hidden />
           <span id="welcome-user-label" class="auth-user-label"></span>
           <button type="button" id="btn-welcome-signout" class="auth-signout-link">Sign out</button>
         </div>
-
         <p id="start-sync-note" class="welcome-sync-note">16 words ready • Firebase Cloud Sync</p>
+      </div>
+    </div>
+
+    <!-- My Ducks & Trophy Shelf Modal (/progress route) -->
+    <div id="ducks-progress-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="ducks-modal-title" hidden>
+      <div class="ducks-shelf-card">
+        <div class="ducks-shelf-header">
+          <div class="ducks-title-cluster">
+            <span class="ducks-trophy-badge" aria-hidden="true">🏆</span>
+            <div>
+              <h2 id="ducks-modal-title">My Ducks &amp; Garden Shelf</h2>
+              <p id="ducks-learner-subtitle" class="ducks-subtitle">Collect golden ducks &amp; grow your words!</p>
+            </div>
+          </div>
+          <button type="button" id="btn-close-ducks" class="close-modal-btn" aria-label="Back to Play Hub">✕</button>
+        </div>
+
+        <div class="ducks-stats-row">
+          <div class="ducks-stat-box">
+            <span class="ducks-stat-icon" aria-hidden="true">🐤</span>
+            <strong id="ducks-stars-total">0</strong>
+            <span>Bonus Ducks &amp; Stars</span>
+          </div>
+          <div class="ducks-stat-box">
+            <span class="ducks-stat-icon" aria-hidden="true">🌻</span>
+            <strong id="ducks-blooming-total">0</strong>
+            <span>Blooming Words</span>
+          </div>
+          <div class="ducks-stat-box">
+            <span class="ducks-stat-icon" aria-hidden="true">🫧</span>
+            <strong id="ducks-due-total">0</strong>
+            <span>Bubbles Ready</span>
+          </div>
+        </div>
+
+        <div id="ducks-word-shelf" class="ducks-word-shelf"></div>
+
+        <div class="ducks-footer-row">
+          <button type="button" id="btn-ducks-parent" class="secondary-pastel-btn">Parent Settings 🔒</button>
+          <button type="button" id="btn-ducks-back-play" class="primary-pastel-btn">▶ Back to Play</button>
+        </div>
       </div>
     </div>
 

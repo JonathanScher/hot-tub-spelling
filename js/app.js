@@ -13,6 +13,8 @@ import {
   removeWordFromStore,
   suggestNextWeekLabel,
   getCurrentWeekLabel,
+  setCurrentWeekLabel,
+  CURRENT_WEEK_KEY,
   getLocalISODate,
   normalizeWord,
   getProfiles,
@@ -28,13 +30,19 @@ import {
   GARDEN_STAGES,
   getCosmeticStars,
   awardCosmeticStars,
-  areAllDueWordsCleared
+  areAllDueWordsCleared,
+  isLocalDev,
+  getDefaultStarterWords
 } from './srs.js';
 import { syncManager } from './sync.js';
 import { HotTubGame } from './game.js';
 
 const LOCK_HOLD_DURATION_MS = 2000;
 const RING_CIRCUMFERENCE = 120;
+const SELECTED_LEVEL_KEY = 'hottub_selected_level_v1';
+const SELECTED_MODE_KEY = 'hottub_selected_mode_v1';
+const TRACKING_MODE_KEY = 'hottub_tracking_mode_v1';
+const START_POP_DELAY_MS = 400;
 
 document.addEventListener('DOMContentLoaded', () => {
   initApp();
@@ -42,10 +50,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function initApp() {
   // DOM References
+  const appShell = document.getElementById('app-shell');
   const startOverlay = document.getElementById('start-overlay');
   const startWeekPill = document.getElementById('start-week-pill');
   const startSyncNote = document.getElementById('start-sync-note');
-  const btnPlay = document.getElementById('btn-play');
+  const btnPlay = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-play'));
   const btnPlayText = document.getElementById('btn-play-text');
   const btnQuickSplash = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-quick-splash'));
   const btnQuickSplashText = document.getElementById('btn-quick-splash-text');
@@ -54,6 +63,36 @@ function initApp() {
   const bonusStarsText = document.getElementById('bonus-stars-text');
   const hudStarsPill = document.getElementById('hud-stars-pill');
   const hudStarsCount = document.getElementById('hud-stars-count');
+
+  // New Play Hub & Login Gate DOM References
+  const playHubView = document.getElementById('play-hub-view');
+  const loginCatDoor = document.getElementById('login-cat-door');
+  const hubWeekDropdownWrap = document.getElementById('hub-week-dropdown-wrap');
+  const btnWeekSelector = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-week-selector'));
+  const weekSelectorPopover = document.getElementById('week-selector-popover');
+  const weekTilesGrid = document.getElementById('week-tiles-grid');
+  const btnMyDucks = document.getElementById('btn-my-ducks');
+  const cardLevelBathtub = /** @type {HTMLButtonElement | null} */ (document.getElementById('card-level-bathtub'));
+  const cardLevelChest = /** @type {HTMLButtonElement | null} */ (document.getElementById('card-level-chest'));
+  const btnMode3 = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-mode-3'));
+  const btnMode10 = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-mode-10'));
+  const wordsDueBubble = document.getElementById('words-due-bubble');
+  const wordsDueCount = document.getElementById('words-due-count');
+  const wordsDueSub = document.getElementById('words-due-sub');
+  const btnTrackingToggle = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-tracking-toggle'));
+  const trackingToggleLabel = document.getElementById('tracking-toggle-label');
+  const trackingCaptionEmoji = document.getElementById('tracking-caption-emoji');
+
+  // My Ducks (/progress) Modal DOM References
+  const ducksProgressModal = document.getElementById('ducks-progress-modal');
+  const btnCloseDucks = document.getElementById('btn-close-ducks');
+  const btnDucksBackPlay = document.getElementById('btn-ducks-back-play');
+  const btnDucksParent = document.getElementById('btn-ducks-parent');
+  const ducksStarsTotal = document.getElementById('ducks-stars-total');
+  const ducksBloomingTotal = document.getElementById('ducks-blooming-total');
+  const ducksDueTotal = document.getElementById('ducks-due-total');
+  const ducksLearnerSubtitle = document.getElementById('ducks-learner-subtitle');
+  const ducksWordShelf = document.getElementById('ducks-word-shelf');
 
   // Learner Profiles DOM References
   const welcomeProfileSelector = document.getElementById('welcome-profile-selector');
@@ -89,7 +128,7 @@ function initApp() {
   const completeOverlay = document.getElementById('complete-overlay');
   const completeSummaryText = document.getElementById('complete-summary-text');
   const completeWordChips = document.getElementById('complete-word-chips');
-  const btnPlayAgain = document.getElementById('btn-play-again');
+  const btnPlayAgain = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-play-again'));
 
   const btnListen = document.getElementById('btn-listen');
   const btnHint = document.getElementById('btn-hint');
@@ -141,6 +180,173 @@ function initApp() {
     }, duration);
   }
 
+  // --- Play Hub State: Level, Mode, and Sleep Mask Tracking Toggle ---
+  let selectedLevel = 'bathtub';
+  let selectedMode = '3';
+  let userExplicitlyChangedModeInSession = false;
+  let isPracticeMode = false;
+
+  function loadInitialLevel() {
+    try {
+      const saved = window.localStorage.getItem(SELECTED_LEVEL_KEY);
+      if (saved === 'chest' || saved === 'bathtub') {
+        return saved;
+      }
+    } catch {
+      // Ignore storage errors
+    }
+    return 'bathtub';
+  }
+
+  function loadInitialTrackingMode() {
+    const today = getLocalISODate();
+    try {
+      const raw = window.localStorage.getItem(TRACKING_MODE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          // Auto-reset Just for Fun mode back to Counting: ON the next day
+          if (parsed.date === today && parsed.practiceMode === true) {
+            return true;
+          }
+          window.localStorage.setItem(
+            TRACKING_MODE_KEY,
+            JSON.stringify({ practiceMode: false, date: today })
+          );
+        }
+      }
+    } catch {
+      // Ignore storage errors
+    }
+    return false;
+  }
+
+  function applyLevelSelection(level, playAudio = false) {
+    selectedLevel = level === 'chest' ? 'chest' : 'bathtub';
+    try {
+      window.localStorage.setItem(SELECTED_LEVEL_KEY, selectedLevel);
+    } catch {
+      // Ignore storage errors
+    }
+    if (cardLevelBathtub) {
+      const isBathtub = selectedLevel === 'bathtub';
+      cardLevelBathtub.classList.toggle('is-selected', isBathtub);
+      cardLevelBathtub.setAttribute('aria-checked', isBathtub ? 'true' : 'false');
+    }
+    if (cardLevelChest) {
+      const isChest = selectedLevel === 'chest';
+      cardLevelChest.classList.toggle('is-selected', isChest);
+      cardLevelChest.setAttribute('aria-checked', isChest ? 'true' : 'false');
+    }
+    if (appShell) {
+      appShell.setAttribute('data-selected-level', selectedLevel);
+    }
+    if (playAudio) {
+      soundEngine.unlockAudio().then(() => {
+        if (selectedLevel === 'chest') {
+          soundEngine.playLevelSelectChest();
+        } else {
+          soundEngine.playLevelSelectBathtub();
+        }
+      });
+    }
+  }
+
+  function applyModeSelection(mode, playAudio = false, isUserAction = false) {
+    selectedMode = mode === '10' ? '10' : '3';
+    if (isUserAction) {
+      userExplicitlyChangedModeInSession = true;
+      try {
+        window.localStorage.setItem(SELECTED_MODE_KEY, selectedMode);
+      } catch {
+        // Ignore storage errors
+      }
+    }
+    if (btnMode3) {
+      const is3 = selectedMode === '3';
+      btnMode3.classList.toggle('is-selected', is3);
+      btnMode3.setAttribute('aria-checked', is3 ? 'true' : 'false');
+    }
+    if (btnMode10) {
+      const is10 = selectedMode === '10';
+      btnMode10.classList.toggle('is-selected', is10);
+      btnMode10.setAttribute('aria-checked', is10 ? 'true' : 'false');
+    }
+    if (playAudio) {
+      soundEngine.unlockAudio().then(() => {
+        soundEngine.playModeQuack(selectedMode === '10' ? 10 : 3);
+      });
+    }
+  }
+
+  function applyTrackingMode(practiceModeOn, playAudio = false) {
+    isPracticeMode = Boolean(practiceModeOn);
+    const today = getLocalISODate();
+    try {
+      window.localStorage.setItem(
+        TRACKING_MODE_KEY,
+        JSON.stringify({ practiceMode: isPracticeMode, date: today })
+      );
+    } catch {
+      // Ignore storage errors
+    }
+
+    if (btnTrackingToggle) {
+      btnTrackingToggle.setAttribute('aria-checked', isPracticeMode ? 'true' : 'false');
+    }
+    if (trackingToggleLabel) {
+      trackingToggleLabel.textContent = isPracticeMode ? 'Just for Fun' : 'Counting: ON';
+    }
+    if (trackingCaptionEmoji) {
+      trackingCaptionEmoji.textContent = isPracticeMode ? '😴' : '👀';
+    }
+    if (startOverlay) {
+      startOverlay.classList.toggle('is-practice-mode', isPracticeMode);
+    }
+    if (wordsDueBubble) {
+      wordsDueBubble.hidden = isPracticeMode;
+    }
+
+    if (playAudio) {
+      soundEngine.unlockAudio().then(() => {
+        soundEngine.playSleepMaskToggle(isPracticeMode);
+      });
+    }
+  }
+
+  selectedLevel = loadInitialLevel();
+  isPracticeMode = loadInitialTrackingMode();
+  applyLevelSelection(selectedLevel, false);
+  applyTrackingMode(isPracticeMode, false);
+
+  if (cardLevelBathtub) {
+    cardLevelBathtub.addEventListener('click', () => {
+      applyLevelSelection('bathtub', true);
+    });
+  }
+  if (cardLevelChest) {
+    cardLevelChest.addEventListener('click', () => {
+      applyLevelSelection('chest', true);
+    });
+  }
+
+  if (btnMode3) {
+    btnMode3.addEventListener('click', () => {
+      applyModeSelection('3', true, true);
+    });
+  }
+  if (btnMode10) {
+    btnMode10.addEventListener('click', () => {
+      applyModeSelection('10', true, true);
+    });
+  }
+
+  if (btnTrackingToggle) {
+    btnTrackingToggle.addEventListener('click', () => {
+      applyTrackingMode(!isPracticeMode, true);
+    });
+  }
+
   // Instantiate Core Game Engine
   const game = new HotTubGame({
     bubbleStage: document.getElementById('bubble-stage'),
@@ -154,6 +360,8 @@ function initApp() {
     retryBadge: document.getElementById('retry-badge'),
 
     onFirstAttemptComplete: (wordStr, firstAttemptErrors, attemptDetails = {}) => {
+      // Secret Practice ("Just for Fun" sleep mask on): scores do not count right now
+      if (isPracticeMode) return;
       const updatedRecord = recordFirstAttemptSRS(wordStr, firstAttemptErrors, attemptDetails);
       if (updatedRecord) {
         syncManager.queueWordUpdate(updatedRecord).catch(() => {});
@@ -161,6 +369,7 @@ function initApp() {
     },
 
     onTrapError: (_trapCategory, updatedHistory) => {
+      if (isPracticeMode) return;
       syncManager.queueTrapHistoryUpdate(getActiveProfileId(), updatedHistory).catch(() => {});
     },
 
@@ -172,12 +381,33 @@ function initApp() {
   // @ts-ignore
   if (typeof window !== 'undefined') window.__gameInstance = game;
 
-  // 1. Wire Firebase Auth State & Family Allowlist Gate
+  // 1. Wire Firebase Auth State & Family Allowlist Gate (State 1: Login Gate vs. State 2: Play Hub)
+  let previousSignedInState = Boolean(authManager.getSession() && authManager.getSession().email);
+  let hasInitializedAuthRender = false;
+
   function renderAuthState(session, errorInfo = null) {
     const isSignedIn = Boolean(session && session.email);
+    const justSignedIn = hasInitializedAuthRender && !previousSignedInState && isSignedIn;
+    previousSignedInState = isSignedIn;
+    hasInitializedAuthRender = true;
+
+    if (justSignedIn) {
+      soundEngine.unlockAudio().then(() => {
+        soundEngine.playCatWakeMeow();
+      });
+      if (loginCatDoor) {
+        loginCatDoor.classList.add('is-door-opening');
+        setTimeout(() => {
+          loginCatDoor.classList.remove('is-door-opening');
+        }, 600);
+      }
+    }
 
     if (authGateBox) {
       authGateBox.hidden = isSignedIn;
+    }
+    if (playHubView) {
+      playHubView.hidden = !isSignedIn;
     }
     if (btnPlay) {
       btnPlay.hidden = !isSignedIn;
@@ -275,8 +505,34 @@ function initApp() {
 
   renderAuthState(authManager.getSession(), null);
 
+  function openPlayHub() {
+    soundEngine.unlockAudio().then(() => soundEngine.playCatWakeMeow());
+    if (loginCatDoor) loginCatDoor.classList.add('is-door-opening');
+    setTimeout(() => {
+      if (authGateBox) authGateBox.hidden = true;
+      if (playHubView) playHubView.hidden = false;
+      if (btnPlay) btnPlay.hidden = false;
+      if (loginCatDoor) loginCatDoor.classList.remove('is-door-opening');
+    }, 400);
+  }
+
+  if (loginCatDoor) {
+    loginCatDoor.addEventListener('click', (ev) => {
+      if (ev.target && (/** @type {HTMLElement} */ (ev.target).closest('#btn-google-signin'))) {
+        return;
+      }
+      openPlayHub();
+    });
+  }
+
   if (btnGoogleSignin) {
     btnGoogleSignin.addEventListener('click', () => {
+      soundEngine.unlockAudio().then(() => {
+        soundEngine.playCatWakeMeow();
+      });
+      if (isLocalDev()) {
+        openPlayHub();
+      }
       authManager.signInWithGoogle();
     });
   }
@@ -502,15 +758,212 @@ function initApp() {
     });
   }
 
+  // --- Top-Left Active Week Selector Popover & Numbered Wooden Tiles ---
+  function resolveActiveWeekDisplay(activeWords) {
+    try {
+      const explicitStored = window.localStorage.getItem(CURRENT_WEEK_KEY);
+      if (explicitStored && String(explicitStored).trim()) {
+        return String(explicitStored).trim();
+      }
+    } catch {
+      // Ignore storage errors
+    }
+    return getCurrentWeekLabel(activeWords);
+  }
+
+  function renderWeekTilesGrid(currentWeekLabel, activeWords) {
+    if (!weekTilesGrid) return;
+    weekTilesGrid.innerHTML = '';
+
+    let maxWeekNum = 8;
+    for (const w of activeWords) {
+      const m = /^week\s*(\d+)$/i.exec(String(w.week_label || '').trim());
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (n > maxWeekNum) maxWeekNum = n;
+      }
+    }
+    const currMatch = /^week\s*(\d+)$/i.exec(String(currentWeekLabel || '').trim());
+    const currWeekNum = currMatch ? parseInt(currMatch[1], 10) : -1;
+    if (currWeekNum > maxWeekNum) maxWeekNum = currWeekNum;
+
+    for (let num = 1; num <= maxWeekNum; num++) {
+      const label = `Week ${num}`;
+      const isSelected = currWeekNum === num || String(currentWeekLabel).trim().toLowerCase() === label.toLowerCase();
+      const tile = document.createElement('button');
+      tile.type = 'button';
+      tile.className = `week-wood-tile${isSelected ? ' is-active' : ''}`;
+      tile.setAttribute('data-week-label', label);
+      tile.setAttribute('role', 'menuitemradio');
+      tile.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+      tile.textContent = String(num);
+      tile.addEventListener('click', () => {
+        setCurrentWeekLabel(label);
+        soundEngine.unlockAudio().then(() => soundEngine.playUiTap());
+        closeWeekPopover();
+        refreshWelcomeMetadata();
+      });
+      weekTilesGrid.appendChild(tile);
+    }
+  }
+
+  function closeWeekPopover() {
+    if (weekSelectorPopover) weekSelectorPopover.hidden = true;
+    if (btnWeekSelector) btnWeekSelector.setAttribute('aria-expanded', 'false');
+  }
+
+  if (btnWeekSelector && weekSelectorPopover) {
+    btnWeekSelector.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const willOpen = weekSelectorPopover.hidden;
+      weekSelectorPopover.hidden = !willOpen;
+      btnWeekSelector.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+      soundEngine.unlockAudio().then(() => soundEngine.playUiTap());
+    });
+  }
+
+  document.addEventListener('click', (ev) => {
+    if (
+      weekSelectorPopover &&
+      !weekSelectorPopover.hidden &&
+      hubWeekDropdownWrap &&
+      !hubWeekDropdownWrap.contains(/** @type {Node} */ (ev.target))
+    ) {
+      closeWeekPopover();
+    }
+  });
+
+  // --- Top-Right Progress Link ("My Ducks" -> /progress) ---
+  function renderDucksProgressShelf() {
+    const words = loadWords();
+    const activeWords = words.filter((w) => w.active !== false);
+    const today = getLocalISODate();
+    const dueCount = activeWords.filter((w) => !w.next_review || w.next_review <= today).length;
+    const bloomingCount = activeWords.filter((w) => w.box >= 4).length;
+    const activeProf = getActiveProfile();
+    const totalStars = getCosmeticStars(activeProf.id);
+
+    if (ducksStarsTotal) ducksStarsTotal.textContent = String(totalStars);
+    if (ducksBloomingTotal) ducksBloomingTotal.textContent = String(bloomingCount);
+    if (ducksDueTotal) ducksDueTotal.textContent = String(dueCount);
+    if (ducksLearnerSubtitle) {
+      ducksLearnerSubtitle.textContent = `${activeProf.name}'s duck & word collection (${activeWords.length} words)`;
+    }
+
+    if (ducksWordShelf) {
+      ducksWordShelf.innerHTML = '';
+      for (const w of activeWords) {
+        const stage = getGardenStage(w.box || 1);
+        const chip = document.createElement('span');
+        chip.className = 'word-chip';
+        chip.title = `${w.week_label} • Stage ${stage.level}: ${stage.name}`;
+        chip.innerHTML = `
+          <img src="${stage.icon}" class="chip-stage-img" alt="${stage.name}" />
+          <span class="chip-word">${escapeHtml(w.word)}</span>
+        `;
+        ducksWordShelf.appendChild(chip);
+      }
+    }
+  }
+
+  function openDucksProgressModal(pushRoute = true) {
+    if (!ducksProgressModal) return;
+    renderDucksProgressShelf();
+    ducksProgressModal.hidden = false;
+    if (pushRoute && typeof window !== 'undefined' && window.history && window.location.pathname !== '/progress') {
+      try {
+        window.history.pushState({ view: 'progress' }, '', '/progress');
+      } catch {
+        // Ignore history errors in sandboxed/file environments
+      }
+    }
+  }
+
+  function closeDucksProgressModal() {
+    if (!ducksProgressModal) return;
+    ducksProgressModal.hidden = true;
+    if (typeof window !== 'undefined' && window.history && window.location.pathname === '/progress') {
+      try {
+        window.history.pushState({ view: 'hub' }, '', '/');
+      } catch {
+        // Ignore history errors
+      }
+    }
+  }
+
+  if (btnMyDucks) {
+    btnMyDucks.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      soundEngine.unlockAudio().then(() => soundEngine.playUiTap());
+      openDucksProgressModal(true);
+    });
+  }
+
+  if (btnCloseDucks) {
+    btnCloseDucks.addEventListener('click', closeDucksProgressModal);
+  }
+  if (btnDucksBackPlay) {
+    btnDucksBackPlay.addEventListener('click', closeDucksProgressModal);
+  }
+  if (btnDucksParent) {
+    btnDucksParent.addEventListener('click', () => {
+      closeDucksProgressModal();
+      openMathGate();
+    });
+  }
+  if (ducksProgressModal) {
+    ducksProgressModal.addEventListener('click', (ev) => {
+      if (ev.target === ducksProgressModal) {
+        closeDucksProgressModal();
+      }
+    });
+  }
+
   function refreshWelcomeMetadata() {
     const words = loadWords();
     const activeWords = words.filter((w) => w.active !== false);
-    const currentWeek = getCurrentWeekLabel(activeWords);
+    const currentWeek = resolveActiveWeekDisplay(activeWords);
     const today = getLocalISODate();
     const dueCount = activeWords.filter((w) => !w.next_review || w.next_review <= today).length;
 
     if (startWeekPill) {
-      startWeekPill.textContent = `${currentWeek} • Cozy Bathhouse`;
+      startWeekPill.textContent = currentWeek;
+    }
+
+    renderWeekTilesGrid(currentWeek, activeWords);
+
+    // Smart Default for Mode Toggle:
+    // Defaults to 3 Words if the child has >5 words due (reduces friction to start), or remembers their last choice.
+    if (!userExplicitlyChangedModeInSession) {
+      let savedMode = null;
+      try {
+        savedMode = window.localStorage.getItem(SELECTED_MODE_KEY);
+      } catch {
+        // Ignore
+      }
+      if (dueCount > 5) {
+        applyModeSelection('3', false, false);
+      } else if (savedMode === '10' || savedMode === '3') {
+        applyModeSelection(savedMode, false, false);
+      } else {
+        applyModeSelection('3', false, false);
+      }
+    }
+
+    // Floating Iridescent Soap Bubble Badge ("Words Due Today")
+    if (wordsDueBubble && wordsDueCount && wordsDueSub) {
+      wordsDueBubble.hidden = isPracticeMode;
+      if (dueCount > 0) {
+        wordsDueBubble.classList.remove('is-all-done');
+        wordsDueCount.textContent = String(dueCount);
+        wordsDueSub.textContent = 'to pop!';
+        wordsDueBubble.setAttribute('aria-label', `${dueCount} bubbles ready to pop!`);
+      } else {
+        wordsDueBubble.classList.add('is-all-done');
+        wordsDueCount.textContent = '⭐';
+        wordsDueSub.textContent = 'All done! Free play!';
+        wordsDueBubble.setAttribute('aria-label', 'All done! Free play!');
+      }
     }
 
     const isAuthed = authManager.isAuthenticated();
@@ -559,39 +1012,86 @@ function initApp() {
   refreshProfileUI();
   refreshWelcomeMetadata();
 
-  // 6. Session Start ("Play" & "Play Again" Buttons)
+  if (typeof window !== 'undefined' && window.location && window.location.pathname === '/progress') {
+    if (authManager.isAuthenticated()) {
+      openDucksProgressModal(false);
+    }
+  }
+
+  // Idle Ambient Feedback: Faint, slow bubble pop every 10 seconds while on the Play Hub
+  setInterval(() => {
+    if (
+      startOverlay &&
+      !startOverlay.hidden &&
+      authManager.isAuthenticated() &&
+      soundEngine.unlocked
+    ) {
+      soundEngine.playFaintAmbientBubble();
+    }
+  }, 10000);
+
+  // 6. Session Start ("PLAY !" & "Play Again" Buttons with Double-Tap Prevention & 400ms Bubble-Pop)
+  let isLaunchingSession = false;
+
   async function launchNewSession(triggerBtn, labelEl, options = {}) {
-    if (!authManager.isAuthenticated()) {
-      showToast('Please sign in once with an authorized family Google account first.');
-      return;
+    if (isLaunchingSession) return;
+    isLaunchingSession = true;
+
+    if (triggerBtn) {
+      triggerBtn.disabled = true;
+      if (triggerBtn === btnPlay) {
+        triggerBtn.classList.add('is-popping-start');
+      }
     }
 
-    if (triggerBtn) triggerBtn.disabled = true;
-    const prevText = labelEl ? labelEl.textContent : '';
-    if (labelEl) labelEl.textContent = 'Warming tub...';
+    const useQuickMode =
+      options.quickSplash !== undefined ? Boolean(options.quickSplash) : selectedMode === '3';
 
-    // Unlock Web Audio API & 3-Tier Speech Cascade inside direct tap gesture!
-    await Promise.all([
-      soundEngine.unlockAudio(),
-      speechEngine.unlockSpeech()
-    ]);
-    soundEngine.playBubblePop(2);
+    // 1. Web Audio & Speech unlock within user gesture
+    try {
+      await Promise.all([
+        soundEngine.unlockAudio().catch(() => {}),
+        speechEngine.unlockSpeech().catch(() => {})
+      ]);
+    } catch (_) {}
 
-    // Fetch latest word list & SRS progression from Firebase Cloud Firestore if online
-    if (syncManager.isCloudReady() && navigator.onLine !== false) {
-      await syncManager.syncNow(3500);
+    if (triggerBtn === btnPlay) {
+      try {
+        soundEngine.playStartHarpGlissando();
+      } catch (_) {}
+    } else {
+      try {
+        soundEngine.playBubblePop(2);
+      } catch (_) {}
     }
 
+    // 2. Non-blocking cloud sync in background if signed in and online
+    if (authManager.isAuthenticated() && syncManager.isCloudReady() && navigator.onLine !== false) {
+      syncManager.syncNow(2000).catch(() => {});
+    }
+
+    // 3. 400ms bubble pop animation
+    await new Promise((resolve) => setTimeout(resolve, START_POP_DELAY_MS));
+
+    // 4. Build session word list
     const allWords = loadWords();
-    const sessionWords = buildSessionWords(allWords, 8, 10, options);
+    let sessionWords = useQuickMode
+      ? buildSessionWords(allWords, 3, 3, { ...options, quickSplash: true })
+      : buildSessionWords(allWords, 8, 10, { ...options, quickSplash: false });
 
-    if (sessionWords.length === 0) {
-      if (triggerBtn) triggerBtn.disabled = false;
-      if (labelEl && prevText) labelEl.textContent = prevText;
-      showToast('No words due today! Try Full Practice or come back tomorrow ⭐');
-      return;
+    // Fallbacks: if all due words are cleared ("All done! Free play!"), or if list is empty,
+    // seamlessly provide words from allWords or starter words so the child is NEVER blocked!
+    if (!sessionWords || sessionWords.length === 0) {
+      sessionWords = buildSessionWords(allWords, 3, 3, { ...options, quickSplash: false }).slice(0, useQuickMode ? 3 : 8);
+    }
+    if (!sessionWords || sessionWords.length === 0) {
+      sessionWords = allWords.slice(0, useQuickMode ? 3 : 8);
+    }
+    if (!sessionWords || sessionWords.length === 0) {
+      sessionWords = getDefaultStarterWords().slice(0, useQuickMode ? 3 : 8);
     }
 
+    // 5. Hide overlays and transition straight into the level
     if (startOverlay) {
       startOverlay.hidden = true;
       startOverlay.classList.remove('is-active');
@@ -601,20 +1101,37 @@ function initApp() {
       completeOverlay.classList.remove('is-active');
     }
 
-    if (triggerBtn) triggerBtn.disabled = false;
-    if (labelEl && prevText) labelEl.textContent = prevText;
+    if (triggerBtn) {
+      triggerBtn.disabled = false;
+      triggerBtn.classList.remove('is-popping-start');
+    }
+    isLaunchingSession = false;
 
     refreshWelcomeMetadata();
-    game.startSession(sessionWords, allWords);
+    game.startSession(sessionWords, allWords && allWords.length > 0 ? allWords : getDefaultStarterWords());
   }
 
-  btnPlay.addEventListener('click', () => launchNewSession(btnPlay, btnPlayText));
+  if (btnPlay) {
+    // Double-Tap Prevention: disable immediately while the 400ms bubble-pop plays
+    btnPlay.addEventListener('pointerdown', (ev) => {
+      if (ev.button !== undefined && ev.button !== 0) return;
+      if (isLaunchingSession) return;
+      launchNewSession(btnPlay, btnPlayText);
+    });
+    btnPlay.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      if (isLaunchingSession) return;
+      launchNewSession(btnPlay, btnPlayText);
+    });
+  }
   if (btnQuickSplash) {
     btnQuickSplash.addEventListener('click', () =>
       launchNewSession(btnQuickSplash, btnQuickSplashText, { quickSplash: true })
     );
   }
-  btnPlayAgain.addEventListener('click', () => launchNewSession(btnPlayAgain, null));
+  if (btnPlayAgain) {
+    btnPlayAgain.addEventListener('click', () => launchNewSession(btnPlayAgain, null));
+  }
   if (btnCompleteQuickSplash) {
     btnCompleteQuickSplash.addEventListener('click', () =>
       launchNewSession(btnCompleteQuickSplash, null, { quickSplash: true })
