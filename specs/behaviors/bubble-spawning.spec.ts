@@ -12,7 +12,8 @@ import {
   chooseNextBubbleCharOnState,
   spawnBubbleOnState,
   hasTargetInLowerTwoThirds,
-  clampDeltaTime
+  clampDeltaTime,
+  handleBubbleTapOnState
 } from '../../js/game-core.js';
 
 describe('Bubble Spawning & Upward Kinematics (js/game-core.js)', () => {
@@ -265,6 +266,43 @@ describe('Bubble Spawning & Upward Kinematics (js/game-core.js)', () => {
 
       // THEN that bubble is despawned and removed from state.bubbles
       expect(nextState.bubbles.some((b) => b.id === targetBubbleId)).toBe(false);
+    });
+
+    it('returns urgentRemoved array prioritizing bubbles highest on screen when urgent spawn needs room', () => {
+      // GIVEN a game state with 7 floating bubbles where next target character is not present
+      const state = createGameState({
+        sessionWords: [{ word: 'chat' }],
+        stageWidth: 360,
+        stageHeight: 420,
+        seed: 42
+      });
+      while (state.bubbles.filter((b) => b.state === 'floating').length < 7) {
+        spawnBubbleOnState(state);
+      }
+      expect(state.bubbles.filter((b) => b.state === 'floating')).toHaveLength(7);
+
+      // Target character is 'c'. Change any 'h' in other bubbles so urgent spawn fires for 'h'
+      const cBubble = state.bubbles.find((b) => b.char === 'c')!;
+      state.bubbles.forEach((b) => {
+        if (b !== cBubble && b.char === 'h') b.char = 'z';
+      });
+
+      // Give distinct Y coordinates to candidate bubbles
+      const otherBubbles = state.bubbles.filter((b) => b !== cBubble);
+      otherBubbles.forEach((b, i) => {
+        b.y = 50 + i * 40; // bubble 0 has lowest y (highest on stage)
+      });
+      const highestBubbleId = otherBubbles[0].id;
+
+      // WHEN tapping the correct bubble 'c'
+      const res = handleBubbleTapOnState(state, cBubble);
+
+      // THEN urgentRemoved is populated with the excess bubble closest to top of screen
+      expect(res.handled).toBe(true);
+      expect(res.urgentRemoved).toBeDefined();
+      expect(res.urgentRemoved!.length).toBeGreaterThan(0);
+      expect(res.urgentRemoved![0].id).toBe(highestBubbleId);
+      expect(state.bubbles.some((b) => b.id === highestBubbleId)).toBe(false);
     });
   });
 });

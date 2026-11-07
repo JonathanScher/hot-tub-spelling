@@ -544,6 +544,14 @@ export class HotTubGame {
     const res = handleBubbleTapOnState(this, bubble);
     if (!res.handled || !res.correct) return;
 
+    if (Array.isArray(res.urgentRemoved) && res.urgentRemoved.length > 0) {
+      for (const b of res.urgentRemoved) {
+        if (b.el && b.el.parentNode) {
+          b.el.remove();
+        }
+      }
+    }
+
     if (Array.isArray(res.urgentSpawned) && res.urgentSpawned.length > 0) {
       for (const b of res.urgentSpawned) {
         this._mountBubbleElement(b);
@@ -721,6 +729,15 @@ export class HotTubGame {
         }
         setTimeout(() => this._removeBubble(b), 350);
       }
+    }
+    if (this.stage) {
+      const orphanBubbles = this.stage.querySelectorAll('.soap-bubble');
+      orphanBubbles.forEach((el) => {
+        if (!el.classList.contains('is-gentle-fade') && !el.classList.contains('is-popping')) {
+          el.classList.add('is-gentle-fade');
+          setTimeout(() => el.remove(), 350);
+        }
+      });
     }
 
     // 1. Long-term Leitner SRS progression is determined strictly by the FIRST attempt in the session
@@ -925,6 +942,10 @@ export class HotTubGame {
       }
     }
     this.bubbles = [];
+    if (this.stage) {
+      const leftoverBubbles = this.stage.querySelectorAll('.soap-bubble');
+      leftoverBubbles.forEach((el) => el.remove());
+    }
   }
 
   _renderProgressPebbles() {

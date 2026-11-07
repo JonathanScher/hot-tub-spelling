@@ -739,7 +739,8 @@ export function useHintOnState(state) {
  *   trapCategory?: string | null,
  *   wordCompleted?: boolean,
  *   autoWatermarkTriggered?: boolean,
- *   urgentSpawned?: BubbleEntity[]
+ *   urgentSpawned?: BubbleEntity[],
+ *   urgentRemoved?: BubbleEntity[]
  * }}
  */
 export function handleBubbleTapOnState(state, bubbleOrId) {
@@ -780,6 +781,8 @@ export function handleBubbleTapOnState(state, bubbleOrId) {
 
     /** @type {BubbleEntity[]} */
     const urgentSpawned = [];
+    /** @type {BubbleEntity[]} */
+    const urgentRemoved = [];
 
     // Ensure next required letter delivers promptly if not already floating
     const nextRequired = state.targetChars[state.currentIndex];
@@ -796,8 +799,13 @@ export function handleBubbleTapOnState(state, bubbleOrId) {
         if (activeFloating.length + 2 > MAX_BUBBLES) {
           const excess = activeFloating.length + 2 - MAX_BUBBLES;
           const candidates = activeFloating.filter((b) => b.char !== nextRequired);
+          // Prefer pruning bubbles highest up on stage (closest to top boundary / oldest)
+          candidates.sort((a, b) => a.y - b.y);
           for (let i = 0; i < excess && i < candidates.length; i++) {
-            removeBubbleOnState(state, candidates[i]);
+            const removed = removeBubbleOnState(state, candidates[i]);
+            if (removed) {
+              urgentRemoved.push(removed);
+            }
           }
         }
 
@@ -835,7 +843,8 @@ export function handleBubbleTapOnState(state, bubbleOrId) {
       matchedChar,
       wordCompleted,
       autoWatermarkTriggered: false,
-      urgentSpawned
+      urgentSpawned,
+      urgentRemoved
     };
   } else {
     bubble.state = 'fizzling';
@@ -983,6 +992,7 @@ export function recordWordCompletionOnState(state, options = {}) {
         state.prefilledIndices = [];
       }
       state.currentIndex = getNextUnfilledIndex(state.targetChars, state.prefilledIndices, 0);
+      state.bubbles = [];
       spawnInitialWaveOnState(state);
     }
   }

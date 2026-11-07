@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HotTubGame } from '../../js/game.js';
+import { speechEngine } from '../../js/speech.js';
 
 describe('DOM Presentation & View Controller (Executable Specification for js/game.js)', () => {
   let container: HTMLDivElement;
@@ -16,6 +17,8 @@ describe('DOM Presentation & View Controller (Executable Specification for js/ga
 
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.spyOn(speechEngine, 'speakWord').mockResolvedValue(true as any);
+    vi.spyOn(speechEngine, 'prefetchWords').mockImplementation(() => {});
 
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -248,6 +251,71 @@ describe('DOM Presentation & View Controller (Executable Specification for js/ga
       // THEN baseX is clamped within safe horizontal bounds of the stage
       expect(game.bubbles[0].baseX).toBeLessThanOrEqual(360);
       expect(game.bubbles[0].baseX).toBeGreaterThanOrEqual(0);
+
+      game.stop();
+    });
+
+    it('does not leave stuck or orphaned bubble elements in DOM when urgent spawning prunes excess bubbles across words', async () => {
+      // GIVEN an active multi-word game session ("chat", "soleil")
+      const game = new HotTubGame({
+        bubbleStage,
+        slotsContainer,
+        seed: 42
+      });
+      game.startSession([
+        { word: 'chat', week_label: 'Week 1' },
+        { word: 'soleil', week_label: 'Week 2' }
+      ]);
+
+      // Spawn bubbles until MAX_BUBBLES (7) are floating in stage
+      while (game.bubbles.filter((b) => b.state === 'floating').length < 7) {
+        game._spawnBubble();
+      }
+      expect(game.bubbles.length).toBe(7);
+      expect(bubbleStage.querySelectorAll('.soap-bubble').length).toBe(7);
+
+      // Target character for "chat" at index 0 is 'c'
+      const cBubble = game.bubbles.find((b) => b.char === 'c')!;
+      expect(cBubble).toBeDefined();
+
+      // Ensure next target 'h' is not floating yet so urgent spawn triggers
+      game.bubbles.forEach((b) => {
+        if (b.char === 'h') b.char = 'z';
+      });
+
+      // WHEN tapping the correct bubble 'c'
+      // This triggers urgent spawn (+2 bubbles), causing excess prune of active floating bubbles
+      game._handleBubbleTap(cBubble);
+
+      // THEN all DOM elements in bubbleStage must strictly correspond to tracked entities in game.bubbles
+      // Without fix: pruned bubble was removed from game.bubbles but its element remains orphaned in bubbleStage!
+      const stageButtonsAfterTap = bubbleStage.querySelectorAll('.soap-bubble');
+      expect(stageButtonsAfterTap.length).toBe(game.bubbles.length);
+
+      // Advance timers to complete popping of 'c'
+      vi.advanceTimersByTime(250);
+
+      // Finish the word "chat" ('h', 'a', 't')
+      for (const ch of ['h', 'a', 't']) {
+        let bTarget = game.bubbles.find((b) => b.char === ch && b.state === 'floating');
+        if (!bTarget) {
+          game._spawnBubble();
+          bTarget = game.bubbles.find((b) => b.char === ch && b.state === 'floating')!;
+        }
+        game._handleBubbleTap(bTarget);
+        vi.advanceTimersByTime(350);
+      }
+
+      // Fast-forward through the word celebration pause (2000ms+) to start the next word "soleil"
+      await vi.advanceTimersByTimeAsync(2050);
+
+      // In Word 2 ("soleil"), bubble stage must strictly match tracked game.bubbles
+      // and contain zero stuck/orphaned bubbles from previous words
+      const stageButtonsWord2 = bubbleStage.querySelectorAll('.soap-bubble');
+      expect(game.currentWordObj.word).toBe('soleil');
+      expect(stageButtonsWord2.length).toBe(game.bubbles.length);
+      expect(stageButtonsWord2.length).toBeGreaterThanOrEqual(5);
+      expect(stageButtonsWord2.length).toBeLessThanOrEqual(7);
 
       game.stop();
     });
