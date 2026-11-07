@@ -447,4 +447,127 @@ describe('Multi-Account Family Profiles: Zoé, Brigitte & Eric (Executable Speci
       expect(calinAfterInit.next_review).toBe('2026-11-08');
     });
   });
+
+  describe('4. Welcome Screen Profile Selector for Connected Account', () => {
+    it('displays Brigitte and Test profiles on the welcome screen when Brigitte signs in (not Zoé)', async () => {
+      // GIVEN application initialized on welcome screen
+      const rawHtml = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf8');
+      const sanitizedHtml = rawHtml.replace(/<link\b[^>]*rel=["']stylesheet["'][^>]*>/gi, '');
+      document.documentElement.innerHTML = sanitizedHtml;
+
+      await import('../../js/app.js');
+      document.dispatchEvent(new Event('DOMContentLoaded'));
+
+      // WHEN Brigitte signs in with bbouhana@gmail.com
+      setMockAuthUser({
+        uid: 'uid_brigitte',
+        email: 'bbouhana@gmail.com',
+        displayName: 'Brigitte Bouhana'
+      });
+      await authManager.signInWithGoogle();
+
+      // THEN the welcome profile buttons offer the choice between Brigitte and Test
+      const btnBrigitte = document.querySelector(
+        '#welcome-profile-selector button[data-profile-id="brigitte"]'
+      ) as HTMLButtonElement | null;
+      const btnTest = document.querySelector(
+        '#welcome-profile-selector button[data-profile-id="test"]'
+      ) as HTMLButtonElement | null;
+      const btnDaughter = document.querySelector(
+        '#welcome-profile-selector button[data-profile-id="daughter"]'
+      ) as HTMLButtonElement | null;
+
+      expect(btnBrigitte).not.toBeNull();
+      expect(btnBrigitte?.textContent).toContain('Brigitte');
+      expect(btnBrigitte?.classList.contains('is-active')).toBe(true);
+
+      expect(btnTest).not.toBeNull();
+      expect(btnTest?.textContent).toContain('Test');
+
+      // AND Zoé's profile is NOT displayed for Brigitte
+      expect(btnDaughter).toBeNull();
+    });
+
+    it('displays Eric and Test profiles on the welcome screen when Eric signs in (not Zoé)', async () => {
+      // GIVEN application initialized on welcome screen
+      const rawHtml = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf8');
+      const sanitizedHtml = rawHtml.replace(/<link\b[^>]*rel=["']stylesheet["'][^>]*>/gi, '');
+      document.documentElement.innerHTML = sanitizedHtml;
+
+      await import('../../js/app.js');
+      document.dispatchEvent(new Event('DOMContentLoaded'));
+
+      // WHEN Eric signs in with scherparis@gmail.com
+      setMockAuthUser({
+        uid: 'uid_eric',
+        email: 'scherparis@gmail.com',
+        displayName: 'Eric Scher'
+      });
+      await authManager.signInWithGoogle();
+
+      // THEN the welcome profile buttons offer the choice between Eric and Test
+      const btnEric = document.querySelector(
+        '#welcome-profile-selector button[data-profile-id="eric"]'
+      ) as HTMLButtonElement | null;
+      const btnTest = document.querySelector(
+        '#welcome-profile-selector button[data-profile-id="test"]'
+      ) as HTMLButtonElement | null;
+      const btnDaughter = document.querySelector(
+        '#welcome-profile-selector button[data-profile-id="daughter"]'
+      ) as HTMLButtonElement | null;
+
+      expect(btnEric).not.toBeNull();
+      expect(btnEric?.textContent).toContain('Eric');
+      expect(btnEric?.classList.contains('is-active')).toBe(true);
+
+      expect(btnTest).not.toBeNull();
+      expect(btnTest?.textContent).toContain('Test');
+
+      // AND Zoé's profile is NOT displayed for Eric
+      expect(btnDaughter).toBeNull();
+    });
+
+    it('displays Zoé and Test profiles on the welcome screen when Zoé signs in (not Brigitte or Eric)', async () => {
+      // GIVEN application initialized on welcome screen
+      const rawHtml = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf8');
+      const sanitizedHtml = rawHtml.replace(/<link\b[^>]*rel=["']stylesheet["'][^>]*>/gi, '');
+      document.documentElement.innerHTML = sanitizedHtml;
+
+      await import('../../js/app.js');
+      document.dispatchEvent(new Event('DOMContentLoaded'));
+
+      // WHEN Zoé signs in with scher.jonathan@gmail.com
+      setMockAuthUser({
+        uid: 'uid_zoe',
+        email: 'scher.jonathan@gmail.com',
+        displayName: 'Zoé Scher'
+      });
+      await authManager.signInWithGoogle();
+
+      // THEN the welcome profile buttons offer the choice between Zoé and Test
+      const btnDaughter = document.querySelector(
+        '#welcome-profile-selector button[data-profile-id="daughter"]'
+      ) as HTMLButtonElement | null;
+      const btnTest = document.querySelector(
+        '#welcome-profile-selector button[data-profile-id="test"]'
+      ) as HTMLButtonElement | null;
+      const btnBrigitte = document.querySelector(
+        '#welcome-profile-selector button[data-profile-id="brigitte"]'
+      ) as HTMLButtonElement | null;
+      const btnEric = document.querySelector(
+        '#welcome-profile-selector button[data-profile-id="eric"]'
+      ) as HTMLButtonElement | null;
+
+      expect(btnDaughter).not.toBeNull();
+      expect(btnDaughter?.textContent).toContain('Zoé');
+      expect(btnDaughter?.classList.contains('is-active')).toBe(true);
+
+      expect(btnTest).not.toBeNull();
+      expect(btnTest?.textContent).toContain('Test');
+
+      // AND Brigitte and Eric are NOT displayed for Zoé
+      expect(btnBrigitte).toBeNull();
+      expect(btnEric).toBeNull();
+    });
+  });
 });

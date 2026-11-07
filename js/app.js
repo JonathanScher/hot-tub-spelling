@@ -22,6 +22,7 @@ import {
   updateProfileName,
   resetProfileProgress,
   getProfileStatsSummary,
+  getProfileForEmail,
   DEFAULT_PROFILES,
   getGardenStage,
   GARDEN_STAGES,
@@ -228,6 +229,7 @@ function initApp() {
     }
 
     renderAllowedEmailChips();
+    refreshProfileUI();
     refreshWelcomeMetadata();
   }
 
@@ -288,6 +290,7 @@ function initApp() {
   const handleSignOut = async () => {
     await authManager.signOut();
     showToast('Signed out of family Google account.');
+    refreshProfileUI();
     refreshWelcomeMetadata();
   };
 
@@ -311,15 +314,33 @@ function initApp() {
   });
 
   // 4. Refresh Welcome Screen Metadata & Learner Profiles
+  function getSessionLearnerProfile() {
+    const session = authManager.getSession();
+    if (session && session.email) {
+      return getProfileForEmail(session.email);
+    }
+    const activeId = getActiveProfileId();
+    if (activeId === 'brigitte') {
+      return getProfileForEmail('bbouhana@gmail.com');
+    }
+    if (activeId === 'eric') {
+      return getProfileForEmail('scherparis@gmail.com');
+    }
+    return getProfileForEmail('scher.jonathan@gmail.com');
+  }
+
   function refreshProfileUI() {
     const activeId = getActiveProfileId();
     const profiles = getProfiles();
     const activeProf = getActiveProfile();
+    const learnerProf = getSessionLearnerProfile();
+    const testProf = profiles.find((p) => p.id === 'test') || DEFAULT_PROFILES[1];
+    const welcomeProfiles = [learnerProf, testProf];
 
     // 1. Welcome Screen Buttons
     if (welcomeProfileSelector) {
       welcomeProfileSelector.innerHTML = '';
-      for (const prof of profiles) {
+      for (const prof of welcomeProfiles) {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = `profile-btn ${prof.id === activeId ? 'is-active' : ''}`;
@@ -335,6 +356,10 @@ function initApp() {
 
     if (testModeBanner) {
       testModeBanner.hidden = activeId !== 'test';
+      const bannerText = testModeBanner.querySelector('.test-banner-text');
+      if (bannerText) {
+        bannerText.textContent = `Test Profile Active — ${learnerProf.name}'s progress & schedule are 100% safe!`;
+      }
     }
 
     // 2. HUD Topbar Pill
@@ -345,29 +370,28 @@ function initApp() {
     // 3. Parent Dashboard Profile Section
     if (parentActiveProfileBadge) {
       parentActiveProfileBadge.textContent = `Active: ${activeProf.name}`;
-      parentActiveProfileBadge.classList.toggle('is-connected', activeId === 'daughter');
+      parentActiveProfileBadge.classList.toggle('is-connected', activeId === learnerProf.id);
     }
 
-    const dStats = getProfileStatsSummary('daughter');
+    const learnerStats = getProfileStatsSummary(learnerProf.id);
     const tStats = getProfileStatsSummary('test');
 
-    const dProfile = profiles.find((p) => p.id === 'daughter') || DEFAULT_PROFILES[0];
-    if (daughterProfileNameLabel) daughterProfileNameLabel.textContent = dProfile.name;
+    if (daughterProfileNameLabel) daughterProfileNameLabel.textContent = learnerProf.name;
 
-    if (profDaughterWords) profDaughterWords.textContent = `${dStats.totalWords} words`;
-    if (profDaughterDue) profDaughterDue.textContent = `${dStats.dueWords} due`;
-    if (profDaughterMastered) profDaughterMastered.textContent = `${dStats.masteredWords} Blooming (Box 4–5)`;
+    if (profDaughterWords) profDaughterWords.textContent = `${learnerStats.totalWords} words`;
+    if (profDaughterDue) profDaughterDue.textContent = `${learnerStats.dueWords} due`;
+    if (profDaughterMastered) profDaughterMastered.textContent = `${learnerStats.masteredWords} Blooming (Box 4–5)`;
 
     if (profTestWords) profTestWords.textContent = `${tStats.totalWords} words`;
     if (profTestDue) profTestDue.textContent = `${tStats.dueWords} due`;
     if (profTestMastered) profTestMastered.textContent = `${tStats.masteredWords} Blooming (Box 4–5)`;
 
-    if (colProfileDaughter) colProfileDaughter.classList.toggle('is-current', activeId === 'daughter');
+    if (colProfileDaughter) colProfileDaughter.classList.toggle('is-current', activeId === learnerProf.id);
     if (colProfileTest) colProfileTest.classList.toggle('is-current', activeId === 'test');
 
     if (btnSelectProfDaughter) {
-      btnSelectProfDaughter.textContent = activeId === 'daughter' ? 'Active Profile' : 'Switch to ' + dProfile.name;
-      btnSelectProfDaughter.className = activeId === 'daughter' ? 'primary-pastel-btn is-active' : 'secondary-pastel-btn';
+      btnSelectProfDaughter.textContent = activeId === learnerProf.id ? 'Active Profile' : 'Switch to ' + learnerProf.name;
+      btnSelectProfDaughter.className = activeId === learnerProf.id ? 'primary-pastel-btn is-active' : 'secondary-pastel-btn';
     }
     if (btnSelectProfTest) {
       btnSelectProfTest.textContent = activeId === 'test' ? 'Active Profile' : 'Switch to Test';
@@ -392,13 +416,15 @@ function initApp() {
 
   if (hudProfilePill) {
     hudProfilePill.addEventListener('click', () => {
-      switchActiveProfile('daughter');
+      const learner = getSessionLearnerProfile();
+      switchActiveProfile(learner.id);
     });
   }
 
   if (btnSelectProfDaughter) {
     btnSelectProfDaughter.addEventListener('click', () => {
-      switchActiveProfile('daughter');
+      const learner = getSessionLearnerProfile();
+      switchActiveProfile(learner.id);
     });
   }
 
@@ -410,10 +436,10 @@ function initApp() {
 
   if (btnRenameDaughter) {
     btnRenameDaughter.addEventListener('click', () => {
-      const current = getProfiles().find((p) => p.id === 'daughter');
-      const input = window.prompt("Enter your daughter's name for this profile:", current ? current.name : 'Zoé');
+      const learner = getSessionLearnerProfile();
+      const input = window.prompt(`Enter your name for this profile:`, learner.name);
       if (input && input.trim()) {
-        updateProfileName('daughter', input.trim());
+        updateProfileName(learner.id, input.trim());
         refreshProfileUI();
         refreshWelcomeMetadata();
         showToast(`Profile renamed to "${input.trim()}".`);
@@ -423,15 +449,16 @@ function initApp() {
 
   if (btnResetDaughterProgress) {
     btnResetDaughterProgress.addEventListener('click', async () => {
+      const learner = getSessionLearnerProfile();
       const confirmed = window.confirm(
-        "Reset Zoé's progress? All words in Zoé's profile will reset to Box 1 (due today) and 0 attempts.\n\nThis will also sync to Cloud Firestore."
+        `Reset ${learner.name}'s progress? All words in ${learner.name}'s profile will reset to Box 1 (due today) and 0 attempts.\n\nThis will also sync to Cloud Firestore.`
       );
       if (confirmed) {
-        const resetWords = resetProfileProgress('daughter');
+        const resetWords = resetProfileProgress(learner.id);
         for (const w of resetWords) {
-          syncManager.queueWordUpdate(w, 'daughter').catch(() => {});
+          syncManager.queueWordUpdate(w, learner.id).catch(() => {});
         }
-        syncManager.queueTrapHistoryUpdate('daughter', {}).catch(() => {});
+        syncManager.queueTrapHistoryUpdate(learner.id, {}).catch(() => {});
         if (syncManager.isCloudReady() && navigator.onLine !== false) {
           await syncManager.flushPendingChanges();
         }
@@ -439,7 +466,7 @@ function initApp() {
         if (parentModal && !parentModal.hidden) {
           renderParentWordsTable();
         }
-        showToast("Zoé's progress has been reset to Box 1.");
+        showToast(`${learner.name}'s progress has been reset to Box 1.`);
       }
     });
   }
