@@ -18,26 +18,33 @@ import {
   onAuthStateChanged,
   fbSignOut
 } from './firebase-config.js';
+import { setActiveProfileId } from './srs.js';
 
 const AUTH_SESSION_STORAGE_KEY = 'hottub_firebase_auth_session_v1';
 const EXTRA_ALLOWED_EMAILS_KEY = 'hottub_extra_allowed_emails_v1';
 
 /**
  * SHA-256 hashes of the default authorized family email addresses (trimmed & lowercased):
- * - scher.jonathan@gmail.com
+ * - scher.jonathan@gmail.com (Zoé)
  * - williams.evamary@gmail.com
  * - jonathan.scher.office@gmail.com
+ * - bbouhana@gmail.com (Brigitte)
+ * - scherparis@gmail.com (Eric)
  */
 const DEFAULT_ALLOWED_EMAIL_HASHES = new Set([
   '0ea5a47b28e11f6f02f6585cc6df42e4488e6793505f85911245b71cc1217b21',
   'f0dd963b08241ce2eba75d86e63f3e27f2f2185fdc585577e5379ced119915f0',
-  '3b134eab7a36f8af11346f89b33768868431deb1af084dffcc7f40791c8773cb'
+  '3b134eab7a36f8af11346f89b33768868431deb1af084dffcc7f40791c8773cb',
+  '372ea2e80c05f64c99c13df05bdb3ea9deec8c8e8cd9d3af037d11b9346d2e2e',
+  '55f9e374edfff96d44bec2e00cc8fe27f75c7296d29fae0b1c73c3a32f301dee'
 ]);
 
 const DEFAULT_ALLOWED_LABELS = [
   'scher.jonathan@gmail.com',
   'williams.evamary@gmail.com',
-  'jonathan.scher.office@gmail.com'
+  'jonathan.scher.office@gmail.com',
+  'bbouhana@gmail.com',
+  'scherparis@gmail.com'
 ];
 
 class AuthManager {
@@ -144,6 +151,13 @@ class AuthManager {
 
   getDefaultAllowedEmails() {
     return [...DEFAULT_ALLOWED_LABELS];
+  }
+
+  getProfileIdForEmail(email) {
+    const clean = this.normalizeEmail(email);
+    if (clean === 'bbouhana@gmail.com') return 'brigitte';
+    if (clean === 'scherparis@gmail.com') return 'eric';
+    return 'daughter';
   }
 
   getExtraAllowedEmails() {
@@ -255,17 +269,20 @@ class AuthManager {
     }
 
     const displayName = String(user.displayName || email.split('@')[0]);
+    const profileId = this.getProfileIdForEmail(email);
     const sessionData = {
       uid: String(user.uid || ''),
       email,
       name: displayName,
       givenName: displayName.split(' ')[0] || displayName,
       picture: String(user.photoURL || ''),
+      profileId,
       signedInAt: new Date().toISOString()
     };
 
     this.session = sessionData;
     this._saveSession(sessionData);
+    setActiveProfileId(profileId);
     this._emitChange(null);
   }
 
@@ -310,6 +327,9 @@ class AuthManager {
       if (!this.isEmailAllowed(parsed.email)) {
         localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
         return null;
+      }
+      if (!parsed.profileId) {
+        parsed.profileId = this.getProfileIdForEmail(parsed.email);
       }
       return parsed;
     } catch {

@@ -93,11 +93,9 @@ export function getProfiles(customStorage) {
 }
 
 /**
- * Resolves the active profile ID ('daughter' or 'test').
- * In local development (localhost / 127.0.0.1), defaults to 'test' for safety
- * unless explicitly set in storage.
+ * Saves the learner profiles list.
+ * @param {LearnerProfile[]} profiles
  * @param {StorageLike} [customStorage]
- * @returns {string}
  */
 export function saveProfiles(profiles, customStorage) {
   const store = getStorage(customStorage);
@@ -108,6 +106,13 @@ export function saveProfiles(profiles, customStorage) {
   }
 }
 
+/**
+ * Resolves the active profile ID ('daughter', 'test', 'brigitte', 'eric').
+ * In local development (localhost / 127.0.0.1), defaults to 'test' for safety
+ * unless explicitly set in storage.
+ * @param {StorageLike} [customStorage]
+ * @returns {string}
+ */
 export function getActiveProfileId(customStorage) {
   const store = getStorage(customStorage);
   try {
@@ -127,6 +132,31 @@ export function getActiveProfileId(customStorage) {
 }
 
 /**
+ * Maps a family email address to its corresponding LearnerProfile.
+ * @param {string} email
+ * @param {StorageLike} [customStorage]
+ * @returns {LearnerProfile}
+ */
+export function getProfileForEmail(email, customStorage) {
+  const store = getStorage(customStorage);
+  const clean = String(email || '').trim().toLowerCase();
+  const profiles = getProfiles(store);
+  if (clean === 'bbouhana@gmail.com') {
+    const found = profiles.find((p) => p.id === 'brigitte');
+    if (found) return found;
+    return { id: 'brigitte', name: 'Brigitte', isTest: false, avatar: '👩', trapHistory: {} };
+  }
+  if (clean === 'scherparis@gmail.com') {
+    const found = profiles.find((p) => p.id === 'eric');
+    if (found) return found;
+    return { id: 'eric', name: 'Eric', isTest: false, avatar: '👨', trapHistory: {} };
+  }
+  const daughter = profiles.find((p) => p.id === 'daughter');
+  if (daughter) return daughter;
+  return { id: 'daughter', name: 'Zoé', isTest: false, avatar: '👧', trapHistory: {} };
+}
+
+/**
  * Retrieves the active LearnerProfile object.
  * @param {StorageLike} [customStorage]
  * @returns {LearnerProfile}
@@ -137,6 +167,12 @@ export function getActiveProfile(customStorage) {
   const profiles = getProfiles(store);
   const found = profiles.find((p) => p.id === activeId);
   if (found) return found;
+  if (activeId === 'brigitte') {
+    return { id: 'brigitte', name: 'Brigitte', isTest: false, avatar: '👩', trapHistory: getProfileTrapHistory('brigitte', store) };
+  }
+  if (activeId === 'eric') {
+    return { id: 'eric', name: 'Eric', isTest: false, avatar: '👨', trapHistory: getProfileTrapHistory('eric', store) };
+  }
   return profiles[0] || DEFAULT_PROFILES[0];
 }
 
@@ -163,7 +199,17 @@ export function setActiveProfileId(profileId, customStorage) {
 export function updateProfileName(profileId, newName, customStorage) {
   const store = getStorage(customStorage);
   const profiles = getProfiles(store);
-  const target = profiles.find((p) => p.id === profileId);
+  let target = profiles.find((p) => p.id === profileId);
+  if (!target && (profileId === 'brigitte' || profileId === 'eric')) {
+    target = {
+      id: profileId,
+      name: profileId === 'brigitte' ? 'Brigitte' : 'Eric',
+      isTest: false,
+      avatar: profileId === 'brigitte' ? '👩' : '👨',
+      trapHistory: {}
+    };
+    profiles.push(target);
+  }
   if (target && newName && String(newName).trim()) {
     target.name = String(newName).trim();
     try {
@@ -291,6 +337,13 @@ export function normalizeCategoryName(cat) {
   return s;
 }
 
+function getTrapHistoryStorageKey(profileId) {
+  const cleanId = String(profileId || 'daughter').trim();
+  if (cleanId === 'test') return TEST_DIRTY_TRAP_HISTORY_STORAGE_KEY;
+  if (cleanId === 'daughter') return DIRTY_TRAP_HISTORY_STORAGE_KEY;
+  return `${DIRTY_TRAP_HISTORY_STORAGE_KEY}_${cleanId}`;
+}
+
 /**
  * Retrieves the trap history error counts map for a profile.
  * @param {string} [profileId]
@@ -325,7 +378,8 @@ export function recordTrapError(categoryOrProfileId, profileIdOrCategoryOrOption
   let profileId = '';
   let storage = customStorage;
 
-  if (typeof categoryOrProfileId === 'string' && (categoryOrProfileId === 'daughter' || categoryOrProfileId === 'test')) {
+  const knownProfileIds = new Set(['daughter', 'test', 'brigitte', 'eric']);
+  if (typeof categoryOrProfileId === 'string' && knownProfileIds.has(categoryOrProfileId)) {
     profileId = categoryOrProfileId;
     category = String(profileIdOrCategoryOrOptions || '');
   } else {
@@ -343,8 +397,18 @@ export function recordTrapError(categoryOrProfileId, profileIdOrCategoryOrOption
   const store = getStorage(storage);
   const resolvedProfileId = profileId || getActiveProfileId(store);
   const profiles = getProfiles(store);
-  const prof = profiles.find((p) => p.id === resolvedProfileId);
-  if (!prof) return {};
+  let prof = profiles.find((p) => p.id === resolvedProfileId);
+  if (!prof) {
+    if (resolvedProfileId === 'brigitte') {
+      prof = { id: 'brigitte', name: 'Brigitte', isTest: false, avatar: '👩', trapHistory: {} };
+      profiles.push(prof);
+    } else if (resolvedProfileId === 'eric') {
+      prof = { id: 'eric', name: 'Eric', isTest: false, avatar: '👨', trapHistory: {} };
+      profiles.push(prof);
+    } else {
+      return {};
+    }
+  }
 
   if (!prof.trapHistory || typeof prof.trapHistory !== 'object') {
     prof.trapHistory = {};
@@ -381,7 +445,7 @@ export function recordTrapError(categoryOrProfileId, profileIdOrCategoryOrOption
 export function markProfileTrapHistoryDirty(profileId, trapHistory, customStorage) {
   const store = getStorage(customStorage);
   const cleanId = String(profileId || 'daughter').trim();
-  const storageKey = cleanId === 'test' ? TEST_DIRTY_TRAP_HISTORY_STORAGE_KEY : DIRTY_TRAP_HISTORY_STORAGE_KEY;
+  const storageKey = getTrapHistoryStorageKey(cleanId);
   try {
     store.setItem(
       storageKey,
@@ -405,7 +469,7 @@ export function markProfileTrapHistoryDirty(profileId, trapHistory, customStorag
 export function getDirtyProfileTrapHistory(profileId, customStorage) {
   const store = getStorage(customStorage);
   const cleanId = String(profileId || 'daughter').trim();
-  const storageKey = cleanId === 'test' ? TEST_DIRTY_TRAP_HISTORY_STORAGE_KEY : DIRTY_TRAP_HISTORY_STORAGE_KEY;
+  const storageKey = getTrapHistoryStorageKey(cleanId);
   try {
     const raw = store.getItem(storageKey);
     return raw ? JSON.parse(raw) : null;
@@ -422,7 +486,7 @@ export function getDirtyProfileTrapHistory(profileId, customStorage) {
 export function clearDirtyProfileTrapHistory(profileId, customStorage) {
   const store = getStorage(customStorage);
   const cleanId = String(profileId || 'daughter').trim();
-  const storageKey = cleanId === 'test' ? TEST_DIRTY_TRAP_HISTORY_STORAGE_KEY : DIRTY_TRAP_HISTORY_STORAGE_KEY;
+  const storageKey = getTrapHistoryStorageKey(cleanId);
   try {
     if (typeof store.removeItem === 'function') {
       store.removeItem(storageKey);
@@ -496,17 +560,31 @@ export function mergeProfilesFromCloud(remoteMetaData, customStorage) {
     }
   }
 
-  // 2. Test Profile (if present in remote)
-  const tProf = profiles.find((p) => p.id === 'test');
-  if (tProf && remoteMetaData.profiles && remoteMetaData.profiles.test) {
-    const remoteTest = remoteMetaData.profiles.test;
-    if (remoteTest && remoteTest.trapHistory !== undefined && typeof remoteTest.trapHistory === 'object') {
-      const dirtyTest = getDirtyProfileTrapHistory('test', store);
-      if (dirtyTest && dirtyTest.trapHistory && Object.keys(dirtyTest.trapHistory).length > 0) {
-        const mergedTest = normalizeTrapHistory({ ...remoteTest.trapHistory, ...tProf.trapHistory });
-        tProf.trapHistory = mergedTest;
-      } else {
-        tProf.trapHistory = normalizeTrapHistory(remoteTest.trapHistory);
+  // 2. Non-daughter Profiles (test, brigitte, eric, etc.)
+  if (remoteMetaData.profiles && typeof remoteMetaData.profiles === 'object') {
+    const defaultMeta = {
+      test: { name: 'Test / Sandbox', avatar: '🧪', isTest: true },
+      brigitte: { name: 'Brigitte', avatar: '👩', isTest: false },
+      eric: { name: 'Eric', avatar: '👨', isTest: false }
+    };
+    for (const [pId, pData] of Object.entries(remoteMetaData.profiles)) {
+      if (pId === 'daughter') continue;
+      let targetProf = profiles.find((p) => p.id === pId);
+      if (!targetProf && defaultMeta[pId]) {
+        targetProf = { id: pId, name: defaultMeta[pId].name, avatar: defaultMeta[pId].avatar, isTest: defaultMeta[pId].isTest, trapHistory: {} };
+        profiles.push(targetProf);
+      }
+      if (targetProf && pData && pData.trapHistory !== undefined && typeof pData.trapHistory === 'object') {
+        const dirty = getDirtyProfileTrapHistory(pId, store);
+        if (dirty && dirty.trapHistory && Object.keys(dirty.trapHistory).length > 0) {
+          const merged = normalizeTrapHistory({ ...pData.trapHistory, ...targetProf.trapHistory });
+          for (const [cat, val] of Object.entries(merged)) {
+            merged[cat] = Math.max(val, targetProf.trapHistory[cat] || 0, pData.trapHistory[cat] || 0);
+          }
+          targetProf.trapHistory = merged;
+        } else {
+          targetProf.trapHistory = normalizeTrapHistory(pData.trapHistory);
+        }
       }
     }
   }
@@ -1132,25 +1210,35 @@ export function mergeWordsFromCloud(
   const store = getStorage(customStorage);
   const resolvedProfileId = profileId || getActiveProfileId(store);
 
-  // Sync test profile stats from remote rows if present
+  // Sync non-daughter profile stats from remote rows if present (test, brigitte, eric, etc.)
   if (Array.isArray(remoteRows)) {
-    const testStats = getProfileStatsMap('test', store);
-    let testModified = false;
+    const nonDaughterProfiles = new Set();
     for (const row of remoteRows) {
-      if (row && row.word && row.profiles && typeof row.profiles === 'object' && row.profiles.test) {
-        const pt = row.profiles.test;
-        testStats[normalizeWord(row.word)] = {
-          box: Math.min(5, Math.max(1, parseInt(String(pt.box), 10) || 1)),
-          next_review: pt.next_review || todayIso || getLocalISODate(),
-          streak: Math.max(0, parseInt(String(pt.streak), 10) || 0),
-          total_attempts: Math.max(0, parseInt(String(pt.total_attempts), 10) || 0),
-          correct_attempts: Math.max(0, parseInt(String(pt.correct_attempts), 10) || 0)
-        };
-        testModified = true;
+      if (row && row.profiles && typeof row.profiles === 'object') {
+        for (const pId of Object.keys(row.profiles)) {
+          if (pId !== 'daughter') nonDaughterProfiles.add(pId);
+        }
       }
     }
-    if (testModified) {
-      saveProfileStatsMap('test', testStats, store);
+    for (const pId of nonDaughterProfiles) {
+      const pStats = getProfileStatsMap(pId, store);
+      let pModified = false;
+      for (const row of remoteRows) {
+        if (row && row.word && row.profiles && row.profiles[pId]) {
+          const pt = row.profiles[pId];
+          pStats[normalizeWord(row.word)] = {
+            box: Math.min(5, Math.max(1, parseInt(String(pt.box), 10) || 1)),
+            next_review: pt.next_review || todayIso || getLocalISODate(),
+            streak: Math.max(0, parseInt(String(pt.streak), 10) || 0),
+            total_attempts: Math.max(0, parseInt(String(pt.total_attempts), 10) || 0),
+            correct_attempts: Math.max(0, parseInt(String(pt.correct_attempts), 10) || 0)
+          };
+          pModified = true;
+        }
+      }
+      if (pModified) {
+        saveProfileStatsMap(pId, pStats, store);
+      }
     }
   }
 

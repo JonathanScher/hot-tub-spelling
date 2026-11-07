@@ -518,15 +518,19 @@ class CloudSyncManager {
       }
     }
 
-    // 3. Flush dirty SRS word updates for test profile (if test sync is explicitly enabled)
+    // 3. Flush dirty SRS word updates for other profiles (brigitte, eric, and test if enabled)
+    const otherProfilesToFlush = ['brigitte', 'eric'];
     if (this.isTestProfileSyncEnabled()) {
-      const testDirty = this._loadDirtyMap('test');
-      const testUpdates = Object.values(testDirty);
-      if (testUpdates.length > 0) {
+      otherProfilesToFlush.push('test');
+    }
+    for (const pId of otherProfilesToFlush) {
+      const pDirty = this._loadDirtyMap(pId);
+      const pUpdates = Object.values(pDirty);
+      if (pUpdates.length > 0) {
         try {
           const batch = writeBatch(db);
           const nowIso = new Date().toISOString();
-          for (const item of testUpdates) {
+          for (const item of pUpdates) {
             const cleanWord = normalizeWord(item.word);
             if (!cleanWord) continue;
             const wordRef = doc(db, WORDS_COLLECTION, toWordDocId(cleanWord));
@@ -535,7 +539,7 @@ class CloudSyncManager {
               {
                 word: cleanWord,
                 profiles: {
-                  test: {
+                  [pId]: {
                     box: item.box,
                     next_review: item.next_review,
                     streak: item.streak,
@@ -549,7 +553,8 @@ class CloudSyncManager {
             );
           }
           await batch.commit();
-          this._saveDirtyMap({}, 'test');
+          this._saveDirtyMap({}, pId);
+          this._recordSyncSuccess();
         } catch {
           // Keep dirty map for next retry
         }
@@ -581,25 +586,25 @@ class CloudSyncManager {
       }
     }
 
-    // 5. Flush dirty trap error history for test profile (if test sync is explicitly enabled)
-    if (this.isTestProfileSyncEnabled()) {
-      const testTrapDirty = getDirtyProfileTrapHistory('test');
-      if (testTrapDirty) {
+    // 5. Flush dirty trap error history for other profiles (brigitte, eric, and test if enabled)
+    for (const pId of otherProfilesToFlush) {
+      const pTrapDirty = getDirtyProfileTrapHistory(pId);
+      if (pTrapDirty) {
         try {
           const metaRef = doc(db, METADATA_COLLECTION, APP_STATE_DOC);
           const nowIso = new Date().toISOString();
           const payload = {
             profiles: {
-              test: {
-                trapHistory: testTrapDirty.trapHistory || {},
-                updated_at: testTrapDirty.updated_at || nowIso
+              [pId]: {
+                trapHistory: pTrapDirty.trapHistory || {},
+                updated_at: pTrapDirty.updated_at || nowIso
               }
             },
             updated_at: nowIso,
             updated_by: (auth.currentUser && auth.currentUser.email) || ''
           };
           await setDoc(metaRef, payload, { merge: true });
-          clearDirtyProfileTrapHistory('test');
+          clearDirtyProfileTrapHistory(pId);
           this._recordSyncSuccess();
         } catch {
           // Keep dirty for next retry
@@ -627,13 +632,17 @@ class CloudSyncManager {
   }
 
   getPendingSyncCount() {
-    return (
+    let count =
       Object.keys(this._loadDirtyMap('daughter')).length +
+      Object.keys(this._loadDirtyMap('brigitte')).length +
+      Object.keys(this._loadDirtyMap('eric')).length +
       (this.isTestProfileSyncEnabled() ? Object.keys(this._loadDirtyMap('test')).length : 0) +
       (getDirtyProfileTrapHistory('daughter') ? 1 : 0) +
+      (getDirtyProfileTrapHistory('brigitte') ? 1 : 0) +
+      (getDirtyProfileTrapHistory('eric') ? 1 : 0) +
       (this.isTestProfileSyncEnabled() && getDirtyProfileTrapHistory('test') ? 1 : 0) +
-      this._loadWeeklyBatches().length
-    );
+      this._loadWeeklyBatches().length;
+    return count;
   }
 
   _recordSyncSuccess() {
@@ -643,7 +652,12 @@ class CloudSyncManager {
 
   _loadDirtyMap(profileId = 'daughter') {
     try {
-      const key = profileId === 'test' ? TEST_DIRTY_WORDS_STORAGE_KEY : DIRTY_WORDS_STORAGE_KEY;
+      const key =
+        profileId === 'test'
+          ? TEST_DIRTY_WORDS_STORAGE_KEY
+          : profileId === 'daughter'
+          ? DIRTY_WORDS_STORAGE_KEY
+          : `${DIRTY_WORDS_STORAGE_KEY}_${profileId}`;
       const raw = localStorage.getItem(key);
       return raw ? JSON.parse(raw) : {};
     } catch {
@@ -653,7 +667,12 @@ class CloudSyncManager {
 
   _saveDirtyMap(map, profileId = 'daughter') {
     try {
-      const key = profileId === 'test' ? TEST_DIRTY_WORDS_STORAGE_KEY : DIRTY_WORDS_STORAGE_KEY;
+      const key =
+        profileId === 'test'
+          ? TEST_DIRTY_WORDS_STORAGE_KEY
+          : profileId === 'daughter'
+          ? DIRTY_WORDS_STORAGE_KEY
+          : `${DIRTY_WORDS_STORAGE_KEY}_${profileId}`;
       localStorage.setItem(key, JSON.stringify(map));
     } catch {
       // Ignore quota errors

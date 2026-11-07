@@ -524,21 +524,9 @@ function initApp() {
     }
   }
 
-  // Ensure Zoé's profile is initialized & reset
-  const ZOE_RESET_KEY = 'hottub_zoe_profile_reset_v1';
+  // Ensure Zoé's profile is initialized
   function checkAndApplyZoeReset() {
     updateProfileName('daughter', 'Zoé');
-    try {
-      if (typeof localStorage !== 'undefined' && localStorage.getItem(ZOE_RESET_KEY) !== 'done') {
-        const resetWords = resetProfileProgress('daughter');
-        for (const w of resetWords) {
-          syncManager.queueWordUpdate(w, 'daughter').catch(() => {});
-        }
-        localStorage.setItem(ZOE_RESET_KEY, 'done');
-      }
-    } catch {
-      // Ignore storage errors in restricted private contexts
-    }
   }
   checkAndApplyZoeReset();
   refreshProfileUI();

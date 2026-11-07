@@ -66,6 +66,7 @@ export class HotTubGame {
    * @param {HTMLElement | null} [config.progressLabel] - Text label e.g. "3 / 8"
    * @param {HTMLElement | null} [config.retryBadge] - Subtle badge shown when revisiting a word in-session
    * @param {(wordStr: string, firstAttemptErrors: number, attemptDetails?: any) => void} [config.onFirstAttemptComplete]
+   * @param {(category: string, updatedHistory: any) => void} [config.onTrapError]
    * @param {(summary: import('./game-core.js').SessionSummary) => void} [config.onSessionComplete]
    * @param {number} [config.seed] - Optional seed for deterministic PRNG
    * @param {import('./prng.js').SeededPRNG | (() => number)} [config.prng] - Optional injectable PRNG
@@ -87,6 +88,7 @@ export class HotTubGame {
     this.splashAnchorEl = typeof document !== 'undefined' ? document.getElementById('tube-splash-anchor') : null;
 
     this.onFirstAttemptComplete = config.onFirstAttemptComplete || (() => {});
+    this.onTrapError = config.onTrapError || null;
     this.onSessionComplete = config.onSessionComplete || (() => {});
 
     const initialSeed =
@@ -592,8 +594,8 @@ export class HotTubGame {
 
     if (res.trapCategory) {
       const updatedHistory = recordTrapError(res.trapCategory);
-      if (this.options && typeof this.options.onTrapError === 'function') {
-        this.options.onTrapError(res.trapCategory, updatedHistory);
+      if (this.onTrapError && typeof this.onTrapError === 'function') {
+        this.onTrapError(res.trapCategory, updatedHistory);
       }
     }
 
