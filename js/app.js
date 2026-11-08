@@ -36,6 +36,7 @@ import {
 } from './srs.js';
 import { syncManager } from './sync.js';
 import { HotTubGame } from './game.js';
+import { ChestPlushieGame } from './chest-game.js';
 
 const LOCK_HOLD_DURATION_MS = 2000;
 const RING_CIRCUMFERENCE = 120;
@@ -446,8 +447,62 @@ function initApp() {
     }
   });
 
+  const chestStage = document.getElementById('chest-stage');
+  const wordSignboard = document.getElementById('word-signboard');
+  const bubbleStage = document.getElementById('bubble-stage');
+  const bgIllustration = document.querySelector('.bg-hot-tub-illustration');
+
+  const chestGame = new ChestPlushieGame({
+    stage: chestStage,
+    progressFill: document.getElementById('progress-pebbles'),
+    progressLabel: document.getElementById('progress-label'),
+
+    onFirstAttemptComplete: (wordStr, firstAttemptErrors, attemptDetails = {}) => {
+      const updatedRecord = recordFirstAttemptSRS(wordStr, firstAttemptErrors, attemptDetails);
+      if (updatedRecord) {
+        syncManager.queueWordUpdate(updatedRecord).catch(() => {});
+      }
+    },
+
+    onTrapError: (_trapCategory, updatedHistory) => {
+      syncManager.queueTrapHistoryUpdate(getActiveProfileId(), updatedHistory).catch(() => {});
+    },
+
+    onSessionComplete: (summary) => {
+      renderCompletionScreen(summary);
+    }
+  });
+
+  /**
+   * Switch DOM stages and start the selected level's game session.
+   * @param {Array<Object>} sessionWords
+   * @param {Array<Object>} allWords
+   */
+  function startSelectedLevelSession(sessionWords, allWords) {
+    const isChestLevel = selectedLevel === 'chest';
+    if (wordSignboard) wordSignboard.hidden = isChestLevel;
+    if (bubbleStage) bubbleStage.hidden = isChestLevel;
+    if (chestStage) chestStage.hidden = !isChestLevel;
+    if (bgIllustration) {
+      bgIllustration.classList.toggle('is-chest-level-active', isChestLevel);
+    }
+
+    if (isChestLevel) {
+      game.abandonSession();
+      chestGame.startSession(sessionWords, allWords);
+    } else {
+      chestGame.abandonSession();
+      game.startSession(sessionWords, allWords);
+    }
+  }
+
   // @ts-ignore
-  if (typeof window !== 'undefined') window.__gameInstance = game;
+  if (typeof window !== 'undefined') {
+    // @ts-ignore
+    window.__gameInstance = game;
+    // @ts-ignore
+    window.__chestGameInstance = chestGame;
+  }
 
   // 1. Wire Firebase Auth State & Family Allowlist Gate (State 1: Login Gate vs. State 2: Play Hub)
   let previousSignedInState = Boolean(authManager.getSession() && authManager.getSession().email);
@@ -1199,7 +1254,10 @@ function initApp() {
     isLaunchingSession = false;
 
     refreshWelcomeMetadata();
-    game.startSession(sessionWords, allWords && allWords.length > 0 ? allWords : getDefaultStarterWords());
+    startSelectedLevelSession(
+      sessionWords,
+      allWords && allWords.length > 0 ? allWords : getDefaultStarterWords()
+    );
   }
 
   if (btnPlay) {
@@ -1231,21 +1289,29 @@ function initApp() {
 
   // Designer preview shortcut (e.g. for headless testing & screenshots)
   if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('preview')) {
-    const isQuick = new URLSearchParams(window.location.search).has('quick');
+    const params = new URLSearchParams(window.location.search);
+    const isQuick = params.has('quick');
+    if (params.get('level') === 'chest') {
+      selectedLevel = 'chest';
+    }
     const allWords = loadWords();
     const sessionWords = buildSessionWords(allWords, 8, 10, { quickSplash: isQuick });
     if (startOverlay) {
       startOverlay.hidden = true;
       startOverlay.classList.remove('is-active');
     }
-    game.startSession(sessionWords, allWords);
+    startSelectedLevelSession(sessionWords, allWords);
   }
 
   // 7. Gameplay HUD Buttons ("Listen Again", "Hint" & "Abandon Game")
   if (btnListen) {
     btnListen.addEventListener('click', () => {
       soundEngine.playUiTap();
-      game.replayCurrentWord();
+      if (selectedLevel === 'chest' && chestGame.running) {
+        chestGame.replayCurrentWord();
+      } else {
+        game.replayCurrentWord();
+      }
     });
   }
 
@@ -1270,6 +1336,10 @@ function initApp() {
       } else {
         game.stop();
       }
+    }
+
+    if (chestGame) {
+      chestGame.abandonSession();
     }
 
     if (completeOverlay) {
@@ -1427,6 +1497,7 @@ function initApp() {
 
   function openMathGate() {
     game.pause();
+    chestGame.pause();
     const a = 6 + Math.floor(Math.random() * 8);
     const b = 5 + Math.floor(Math.random() * 9);
     expectedMathSum = a + b;
@@ -1439,7 +1510,10 @@ function initApp() {
 
   function closeMathGate(resumeGame = true) {
     mathGateModal.hidden = true;
-    if (resumeGame) game.resume();
+    if (resumeGame) {
+      game.resume();
+      chestGame.resume();
+    }
   }
 
   btnCancelMath.addEventListener('click', () => closeMathGate(true));
@@ -1461,6 +1535,7 @@ function initApp() {
   // 10. Parent Dashboard Operations
   function openParentDashboard() {
     game.pause();
+    chestGame.pause();
     inputWeekLabel.value = suggestNextWeekLabel();
     refreshProfileUI();
     renderAuthState(authManager.getSession(), null);
@@ -1482,6 +1557,7 @@ function initApp() {
     parentModal.hidden = true;
     refreshWelcomeMetadata();
     game.resume();
+    chestGame.resume();
   }
 
   btnCloseParent.addEventListener('click', closeParentDashboard);

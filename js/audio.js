@@ -711,7 +711,148 @@ class SoundSynthesizer {
     osc.stop(startTime + duration + 0.02);
     overtone.stop(startTime + duration * 0.6);
   }
+
+  /**
+   * Treasure Chest Level — Crisp mechanical tick sound when a letter dial snaps to the next letter.
+   * @param {number} [stepIndex=0]
+   */
+  playDialTick(stepIndex = 0) {
+    if (!this._ensureReady()) return;
+
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    const baseFreq = 620 + ((Math.abs(stepIndex) % 6) * 28);
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(baseFreq, now);
+    osc.frequency.exponentialRampToValueAtTime(280, now + 0.028);
+
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.22, now + 0.004);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.032);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(now);
+    osc.stop(now + 0.035);
+  }
+
+  /**
+   * Treasure Chest Level — Heavy mechanical pin-lock "clunk" + brass chime when a dial locks into place.
+   * @param {number} [pinIndex=0]
+   */
+  playPinLockClunk(pinIndex = 0) {
+    if (!this._ensureReady()) return;
+
+    const now = this.ctx.currentTime;
+
+    // 1. Heavy brass tumbler clunk
+    const clunkOsc = this.ctx.createOscillator();
+    const clunkFilter = this.ctx.createBiquadFilter();
+    const clunkGain = this.ctx.createGain();
+
+    clunkOsc.type = 'square';
+    clunkOsc.frequency.setValueAtTime(165, now);
+    clunkOsc.frequency.exponentialRampToValueAtTime(72, now + 0.09);
+
+    clunkFilter.type = 'lowpass';
+    clunkFilter.frequency.setValueAtTime(360, now);
+
+    clunkGain.gain.setValueAtTime(0.001, now);
+    clunkGain.gain.linearRampToValueAtTime(0.28, now + 0.01);
+    clunkGain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+
+    clunkOsc.connect(clunkFilter);
+    clunkFilter.connect(clunkGain);
+    clunkGain.connect(this.masterGain);
+    clunkOsc.start(now);
+    clunkOsc.stop(now + 0.12);
+
+    // 2. Warm golden pin-lock resonance
+    const noteFreq = PENTATONIC_SCALE[Math.abs(pinIndex) % PENTATONIC_SCALE.length];
+    this._playWarmBellNote(noteFreq, now + 0.035, 0.28, 0.2);
+  }
+
+  /**
+   * Treasure Chest Level — Dull wooden/metallic rattle sound when incorrect dials shake on validation.
+   */
+  playDialRattle() {
+    if (!this._ensureReady()) return;
+
+    const now = this.ctx.currentTime;
+    const pulses = [0, 0.065];
+
+    for (const offset of pulses) {
+      const t = now + offset;
+      const osc = this.ctx.createOscillator();
+      const filter = this.ctx.createBiquadFilter();
+      const gain = this.ctx.createGain();
+
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(148, t);
+      osc.frequency.exponentialRampToValueAtTime(92, t + 0.055);
+
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(320, t);
+
+      gain.gain.setValueAtTime(0.001, t);
+      gain.gain.linearRampToValueAtTime(0.2, t + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(t);
+      osc.stop(t + 0.065);
+    }
+  }
+
+  /**
+   * Treasure Chest Level — Celebratory chest opening fanfare (golden sparkle burst or standard warm unlock).
+   * @param {boolean} [isGolden=false]
+   */
+  playChestUnlock(isGolden = false) {
+    if (!this._ensureReady()) return;
+
+    this.playLevelSelectChest();
+    if (isGolden) {
+      const now = this.ctx.currentTime;
+      const sparkleNotes = [783.99, 1046.5, 1318.51, 1567.98, 2093.0];
+      sparkleNotes.forEach((freq, idx) => {
+        this._playWarmBellNote(freq, now + 0.22 + idx * 0.06, 0.45, 0.22);
+      });
+    }
+  }
+
+  /**
+   * Treasure Chest Level — Cute plushie squeak when tapped on the wooden shelf.
+   * @param {number} [pitchMultiplier=1.0]
+   */
+  playPlushieSqueak(pitchMultiplier = 1.0) {
+    if (!this._ensureReady()) return;
+
+    const now = this.ctx.currentTime;
+    const mult = Number.isFinite(pitchMultiplier) ? Math.max(0.75, Math.min(1.35, pitchMultiplier)) : 1.0;
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(640 * mult, now);
+    osc.frequency.exponentialRampToValueAtTime(1120 * mult, now + 0.065);
+    osc.frequency.exponentialRampToValueAtTime(780 * mult, now + 0.15);
+
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.28, now + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(now);
+    osc.stop(now + 0.18);
+  }
 }
 
 export const soundEngine = new SoundSynthesizer();
+
 

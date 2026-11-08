@@ -48,7 +48,13 @@
       <img
         src="assets/bg-hottub.webp"
         alt=""
-        class="bg-illustration"
+        class="bg-illustration bg-hottub-illustration"
+        onerror="this.style.display='none'"
+      />
+      <img
+        src="assets/bg-chest-shelf.webp"
+        alt=""
+        class="bg-illustration bg-chest-shelf-illustration"
         onerror="this.style.display='none'"
       />
       <div class="bg-soft-vignette"></div>
@@ -254,6 +260,9 @@
 
       <!-- Steaming Hot Tub Arena for Rising Lowercase Letter Bubbles -->
       <section id="bubble-stage" class="bubble-stage" aria-label="Floating letter bubbles area"></section>
+
+      <!-- Treasure Chest & Plushie Shelf Level Arena -->
+      <section id="chest-stage" class="chest-stage" aria-label="Treasure chest and plushie shelf area" hidden></section>
     </main>
 
     <!-- Overlay Layer for Flying Letters into Slots -->
