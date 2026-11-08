@@ -396,6 +396,42 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
       // @ts-ignore
       expect(window.__gameInstance.running).toBe(true);
     });
+
+    it('displays "Jouer" on the play button and hangs over the selected carousel tile', async () => {
+      // GIVEN authenticated Play Hub
+      setMockAuthUser({ email: 'scher.jonathan@gmail.com', displayName: 'Zoé' });
+      await Promise.resolve();
+
+      const btnPlay = document.getElementById('btn-play') as HTMLButtonElement;
+      const carouselMain = document.querySelector('.level-carousel-main') as HTMLElement;
+
+      // THEN the button text is "Jouer"
+      expect(btnPlay.textContent?.trim()).toBe('Jouer');
+
+      // AND the play button is housed inside .level-carousel-main hanging over the selected card
+      expect(carouselMain.contains(btnPlay)).toBe(true);
+    });
+
+    it('starts the game session when tapping directly on the selected carousel tile', async () => {
+      // GIVEN authenticated Play Hub with Cozy Bathtub initially selected
+      setMockAuthUser({ email: 'scher.jonathan@gmail.com', displayName: 'Zoé' });
+      await Promise.resolve();
+
+      const startOverlay = document.getElementById('start-overlay') as HTMLElement;
+      const cardBathtub = document.getElementById('card-level-bathtub') as HTMLButtonElement;
+      expect(cardBathtub.classList.contains('is-selected')).toBe(true);
+      expect(startOverlay.hidden).toBe(false);
+
+      // WHEN tapping the selected carousel tile directly
+      cardBathtub.click();
+      await vi.advanceTimersByTimeAsync(500);
+
+      // THEN start overlay is hidden and game is running
+      expect(startOverlay.hidden).toBe(true);
+      expect(startOverlay.classList.contains('is-active')).toBe(false);
+      // @ts-ignore
+      expect(window.__gameInstance.running).toBe(true);
+    });
   });
 
   describe('5. In-Game Abandon Game Button (Top Right)', () => {

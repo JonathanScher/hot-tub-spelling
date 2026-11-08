@@ -180,6 +180,7 @@ function initApp() {
   let selectedLevel = 'bathtub';
   let selectedMode = '10';
   let userExplicitlyChangedModeInSession = false;
+  let isLaunchingSession = false;
 
   const CAROUSEL_POS_CLASSES = [
     'pos-center',
@@ -330,7 +331,12 @@ function initApp() {
       if (card) {
         const levelId = card.getAttribute('data-level');
         if (levelId) {
-          applyLevelSelection(levelId, true);
+          if (levelId === selectedLevel) {
+            if (isLaunchingSession) return;
+            launchNewSession(btnPlay, btnPlayText);
+          } else {
+            applyLevelSelection(levelId, true);
+          }
         }
       }
     });
@@ -1121,9 +1127,7 @@ function initApp() {
     }
   }, 10000);
 
-  // 6. Session Start ("PLAY !" & "Play Again" Buttons with Double-Tap Prevention & 400ms Bubble-Pop)
-  let isLaunchingSession = false;
-
+  // 6. Session Start ("Jouer" & "Play Again" Buttons with Double-Tap Prevention & 400ms Bubble-Pop)
   async function launchNewSession(triggerBtn, labelEl, options = {}) {
     if (isLaunchingSession) return;
     isLaunchingSession = true;
