@@ -3185,74 +3185,6 @@ body {
   justify-content: center;
 }
 
-/* Floating Iridescent Soap Bubble Badge ("5 to pop!" / "All done! Free play!") */
-.words-due-bubble {
-  position: absolute;
-  top: -42px;
-  right: -28px;
-  z-index: 8;
-  width: 78px;
-  height: 78px;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.3) 20%, transparent 42%),
-    radial-gradient(circle at 50% 50%,
-      rgba(255, 253, 250, 0.72) 0%,
-      rgba(182, 232, 248, 0.68) 58%,
-      rgba(235, 195, 238, 0.78) 82%,
-      rgba(255, 255, 255, 0.94) 100%
-    );
-  border: 2px solid rgba(255, 255, 255, 0.92);
-  box-shadow:
-    0 6px 16px rgba(85, 150, 185, 0.24),
-    inset 0 0 10px rgba(255, 255, 255, 0.85);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 6px;
-  pointer-events: none;
-  animation: dueBubbleFloat 3s ease-in-out infinite;
-}
-
-@keyframes dueBubbleFloat {
-  0%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(-6px) scale(1.04); }
-}
-
-.words-due-number {
-  font-family: var(--font-display);
-  font-size: 1.45rem;
-  font-weight: 800;
-  line-height: 1;
-  color: #3E2210;
-}
-
-.words-due-sub {
-  font-family: var(--font-display);
-  font-size: 0.76rem;
-  font-weight: 700;
-  line-height: 1.05;
-  color: #3E2210;
-  margin-top: 2px;
-}
-
-.words-due-bubble.is-all-done {
-  width: 92px;
-  height: 92px;
-  top: -50px;
-  right: -34px;
-}
-
-.words-due-bubble.is-all-done .words-due-number {
-  font-size: 1.25rem;
-}
-
-.words-due-bubble.is-all-done .words-due-sub {
-  font-size: 0.68rem;
-}
-
 /* Giant Bouncy Green PLAY Button (260x80px desktop) */
 .hub-play-cta-btn {
   width: 260px;
@@ -3511,18 +3443,6 @@ body {
     min-height: 68px;
     font-size: 1.75rem;
   }
-
-  .words-due-bubble {
-    width: 68px;
-    height: 68px;
-    top: -34px;
-    right: -18px;
-  }
-
-  .words-due-number {
-    font-size: 1.25rem;
-  }
-
 }
 
 

@@ -303,34 +303,16 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
     });
   });
 
-  describe('3. Words Due Soap Bubble Badge & Absence of Just for Fun Toggle', () => {
-    it('displays the due word count in the floating bubble and shows a gold star when 0 words are due', async () => {
-      // GIVEN an authenticated session with starter words due today
+  describe('3. Absence of Words Due Bubble & Absence of Just for Fun Toggle', () => {
+    it('does not render the words due floating bubble on the landing page', async () => {
+      // GIVEN an authenticated session
       setMockAuthUser({ email: 'scher.jonathan@gmail.com', displayName: 'Zoé' });
       await Promise.resolve();
 
-      const wordsDueBubble = document.getElementById('words-due-bubble') as HTMLElement;
-      const wordsDueCount = document.getElementById('words-due-count') as HTMLElement;
-      const wordsDueSub = document.getElementById('words-due-sub') as HTMLElement;
-
-      // THEN the floating soap bubble displays the due count > 0
-      expect(wordsDueBubble.hidden).toBe(false);
-      expect(Number(wordsDueCount.textContent)).toBeGreaterThan(0);
-      expect(wordsDueSub.textContent).toBe('to pop!');
-
-      // WHEN all words are scheduled in the future (0 words due today)
-      const futureDate = '2099-12-31';
-      const words = loadWords().map((w) => ({ ...w, next_review: futureDate }));
-      saveWords(words, undefined, 'daughter');
-      setActiveProfileId('daughter');
-      // Trigger profile refresh via profile button
-      const daughterBtn = document.querySelector('button[data-profile-id="daughter"]') as HTMLButtonElement;
-      if (daughterBtn) daughterBtn.click();
-
-      // THEN the bubble displays a gold star and "All done! Free play!"
-      expect(wordsDueBubble.classList.contains('is-all-done')).toBe(true);
-      expect(wordsDueCount.textContent).toBe('⭐');
-      expect(wordsDueSub.textContent).toBe('All done! Free play!');
+      // THEN the floating soap bubble with words to pop is not rendered
+      expect(document.getElementById('words-due-bubble')).toBeNull();
+      expect(document.getElementById('words-due-count')).toBeNull();
+      expect(document.getElementById('words-due-sub')).toBeNull();
     });
 
     it('does not render the Just for Fun button on the title screen and preserves active profile under parent lock', async () => {
@@ -522,16 +504,11 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
 
       expect(getActiveProfileId()).toBe('test');
 
-      const wordsDueBubble = document.getElementById('words-due-bubble') as HTMLElement;
-      const wordsDueCount = document.getElementById('words-due-count') as HTMLElement;
-      const wordsDueSub = document.getElementById('words-due-sub') as HTMLElement;
       const hudStarsCount = document.getElementById('hud-stars-count') as HTMLElement;
       const btnQuickSplashText = document.getElementById('btn-quick-splash-text') as HTMLElement;
 
-      // THEN the landing page statistics show the kid's statistics (⭐ all done, 7 stars), NEVER the test profile's (16 due, 0 stars)
-      expect(wordsDueBubble.classList.contains('is-all-done')).toBe(true);
-      expect(wordsDueCount.textContent).toBe('⭐');
-      expect(wordsDueSub.textContent).toBe('All done! Free play!');
+      // THEN the landing page statistics show the kid's statistics (7 stars, 0 due), NEVER the test profile's (16 due, 0 stars)
+      expect(document.getElementById('words-due-bubble')).toBeNull();
       expect(hudStarsCount.textContent).toBe('7');
       expect(btnQuickSplashText.textContent).toContain('0 due ⭐');
     });

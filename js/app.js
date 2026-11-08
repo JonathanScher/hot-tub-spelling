@@ -71,9 +71,6 @@ function initApp() {
   const cardLevelChest = /** @type {HTMLButtonElement | null} */ (document.getElementById('card-level-chest'));
   const btnMode3 = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-mode-3'));
   const btnMode10 = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-mode-10'));
-  const wordsDueBubble = document.getElementById('words-due-bubble');
-  const wordsDueCount = document.getElementById('words-due-count');
-  const wordsDueSub = document.getElementById('words-due-sub');
 
   // My Ducks (/progress) Modal DOM References
   const ducksProgressModal = document.getElementById('ducks-progress-modal');
@@ -1057,22 +1054,6 @@ function initApp() {
         applyModeSelection(savedMode, false, false);
       } else {
         applyModeSelection('10', false, false);
-      }
-    }
-
-    // Floating Iridescent Soap Bubble Badge ("Words Due Today")
-    if (wordsDueBubble && wordsDueCount && wordsDueSub) {
-      wordsDueBubble.hidden = false;
-      if (dueCount > 0) {
-        wordsDueBubble.classList.remove('is-all-done');
-        wordsDueCount.textContent = String(dueCount);
-        wordsDueSub.textContent = 'to pop!';
-        wordsDueBubble.setAttribute('aria-label', `${dueCount} bubbles ready to pop!`);
-      } else {
-        wordsDueBubble.classList.add('is-all-done');
-        wordsDueCount.textContent = '⭐';
-        wordsDueSub.textContent = 'All done! Free play!';
-        wordsDueBubble.setAttribute('aria-label', 'All done! Free play!');
       }
     }
 
