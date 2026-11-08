@@ -184,7 +184,7 @@ function initApp() {
 
   // --- Play Hub State: Cover-Flow Level Carousel (2 to 10 Levels) and Mode ---
   let selectedLevel = 'bathtub';
-  let selectedMode = '3';
+  let selectedMode = '10';
   let userExplicitlyChangedModeInSession = false;
 
   const CAROUSEL_POS_CLASSES = [
@@ -1033,8 +1033,8 @@ function initApp() {
     const today = getLocalISODate();
     const dueCount = activeWords.filter((w) => !w.next_review || w.next_review <= today).length;
 
-    // Smart Default for Mode Toggle:
-    // Defaults to 3 Words if the child has >5 words due (reduces friction to start), or remembers their last choice.
+    // Mode Toggle Default:
+    // Defaults to Duck Mound (10 Words) unless the user saved a preference in localStorage.
     if (!userExplicitlyChangedModeInSession) {
       let savedMode = null;
       try {
@@ -1042,12 +1042,10 @@ function initApp() {
       } catch {
         // Ignore
       }
-      if (dueCount > 5) {
-        applyModeSelection('3', false, false);
-      } else if (savedMode === '10' || savedMode === '3') {
+      if (savedMode === '10' || savedMode === '3') {
         applyModeSelection(savedMode, false, false);
       } else {
-        applyModeSelection('3', false, false);
+        applyModeSelection('10', false, false);
       }
     }
 

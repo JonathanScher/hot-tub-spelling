@@ -80,7 +80,7 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
   });
 
   describe('2. Zero-Click Readiness, Level Select & Duck Mode Select', () => {
-    it('pre-selects Cozy Bathtub and 3 Words by default and triggers tactile foley on selection', async () => {
+    it('pre-selects Cozy Bathtub and Duck Mound by default and triggers tactile foley on selection', async () => {
       // GIVEN an authenticated session on the Play Hub
       setMockAuthUser({ email: 'scher.jonathan@gmail.com', displayName: 'Zoé' });
       await Promise.resolve();
@@ -90,12 +90,14 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
       const btnMode3 = document.getElementById('btn-mode-3') as HTMLButtonElement;
       const btnMode10 = document.getElementById('btn-mode-10') as HTMLButtonElement;
 
-      // THEN Cozy Bathtub and 3 Words are pre-selected for zero-click readiness
+      // THEN Cozy Bathtub and Duck Mound (10 Words) are pre-selected for zero-click readiness
       expect(cardBathtub.classList.contains('is-selected')).toBe(true);
       expect(cardBathtub.getAttribute('aria-checked')).toBe('true');
       expect(cardChest.classList.contains('is-selected')).toBe(false);
-      expect(btnMode3.classList.contains('is-selected')).toBe(true);
-      expect(btnMode10.classList.contains('is-selected')).toBe(false);
+      expect(btnMode10.classList.contains('is-selected')).toBe(true);
+      expect(btnMode10.getAttribute('aria-checked')).toBe('true');
+      expect(btnMode3.classList.contains('is-selected')).toBe(false);
+      expect(btnMode3.getAttribute('aria-checked')).toBe('false');
 
       // WHEN selecting the Chest Opening level card
       cardChest.click();
@@ -107,15 +109,40 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
       expect(cardBathtub.classList.contains('is-selected')).toBe(false);
       expect(soundEngine.playLevelSelectChest).toHaveBeenCalledTimes(1);
 
-      // WHEN switching to 10 Words ("Big Soak") mode
-      btnMode10.click();
+      // WHEN switching to 3-Duck ("Quick Splash") mode
+      btnMode3.click();
       await Promise.resolve();
 
-      // THEN 10 Words is active and plays the 3-quack chorus
-      expect(btnMode10.classList.contains('is-selected')).toBe(true);
-      expect(btnMode10.getAttribute('aria-checked')).toBe('true');
-      expect(btnMode3.classList.contains('is-selected')).toBe(false);
-      expect(soundEngine.playModeQuack).toHaveBeenCalledWith(10);
+      // THEN 3-Duck mode is active and plays mode quack
+      expect(btnMode3.classList.contains('is-selected')).toBe(true);
+      expect(btnMode3.getAttribute('aria-checked')).toBe('true');
+      expect(btnMode10.classList.contains('is-selected')).toBe(false);
+      expect(soundEngine.playModeQuack).toHaveBeenCalledWith(3);
+    });
+
+    it('uses coherent duck iconography in the mode selector without word-count text labels', async () => {
+      // GIVEN an authenticated session on the Play Hub
+      setMockAuthUser({ email: 'scher.jonathan@gmail.com', displayName: 'Zoé' });
+      await Promise.resolve();
+
+      const btnMode3 = document.getElementById('btn-mode-3') as HTMLButtonElement;
+      const btnMode10 = document.getElementById('btn-mode-10') as HTMLButtonElement;
+
+      // THEN text labels "3 words" and "10 words" are removed
+      expect(btnMode3.querySelector('.mode-words-text')).toBeNull();
+      expect(btnMode10.querySelector('.mode-words-text')).toBeNull();
+      expect(btnMode3.textContent?.toLowerCase()).not.toContain('3 words');
+      expect(btnMode10.textContent?.toLowerCase()).not.toContain('10 words');
+      expect(btnMode10.textContent?.toLowerCase()).not.toContain('x10');
+
+      // AND the 3-duck asset is retained on the 3-word mode button
+      const miniDucks = btnMode3.querySelectorAll('.mini-duck-svg');
+      expect(miniDucks.length).toBe(3);
+
+      // AND an SVG icon for the 10-word mode matching the art style is displayed
+      const clusterSvg = btnMode10.querySelector('.duck-cluster-svg');
+      expect(clusterSvg).not.toBeNull();
+      expect(clusterSvg?.querySelectorAll('g').length).toBeGreaterThanOrEqual(7);
     });
 
     it('renders the simplified Cover-Flow Carousel displaying only core visual elements (no level name, counter, progress bar, or selected crest/box)', async () => {
