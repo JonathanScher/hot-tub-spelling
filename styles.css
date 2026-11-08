@@ -2613,11 +2613,6 @@ body {
   transition: filter 0.35s ease, background-color 0.35s ease;
 }
 
-/* Practice Mode ("Just for Fun" / Sleep Mask ON) cozy twilight tint */
-.landing-hub-overlay.is-practice-mode {
-  background-color: #EAE4D7;
-  filter: sepia(15%) brightness(95%);
-}
 
 /* Gentle 2-second breathing animation on cats */
 .cat-breathing {
@@ -3505,100 +3500,6 @@ body {
   filter: drop-shadow(0 2px 1px rgba(16, 70, 22, 0.5));
 }
 
-/* Bottom-Right Tracking Toggle (White Cat's Pink Sleep Mask) */
-.hub-tracking-corner {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-}
-
-.tracking-caption-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-family: var(--font-display);
-  font-size: 0.92rem;
-  font-weight: 700;
-  color: #3E2210;
-}
-
-.tracking-mask-switch {
-  position: relative;
-  width: 112px;
-  height: 58px;
-  min-width: 112px;
-  min-height: 58px;
-  padding: 5px;
-  border-radius: 999px;
-  border: 2.5px solid #5C3A21;
-  background: linear-gradient(180deg, #D5A87C 0%, #BA895B 100%);
-  box-shadow:
-    0 4px 0 #482B15,
-    0 8px 16px rgba(60, 35, 15, 0.18),
-    inset 0 2px 4px rgba(50, 25, 10, 0.3);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  transition: background 0.25s ease;
-}
-
-.tracking-switch-well {
-  position: absolute;
-  left: 10px;
-  width: 38px;
-  height: 36px;
-  border-radius: 50%;
-  background: rgba(245, 229, 208, 0.65);
-  border: 1.5px solid rgba(92, 58, 33, 0.45);
-  pointer-events: none;
-}
-
-.tracking-cat-knob {
-  position: relative;
-  z-index: 2;
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
-  background: #FFF9F0;
-  border: 2px solid #5C3A21;
-  box-shadow: 0 2px 5px rgba(45, 22, 8, 0.25);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transform: translateX(0);
-  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.tracking-mask-switch[aria-checked="true"] .tracking-cat-knob {
-  transform: translateX(51px);
-}
-
-.white-cat-mask-svg {
-  width: 40px;
-  height: 40px;
-  overflow: visible;
-}
-
-/* Toggle between Open Eyes (Tracking ON) and Pink Sleep Mask (Just for Fun / Tracking OFF) */
-.tracking-mask-switch[aria-checked="false"] .cat-sleep-mask {
-  opacity: 0;
-  transform: translateY(-8px);
-  transition: opacity 0.2s ease, transform 0.2s ease;
-}
-
-.tracking-mask-switch[aria-checked="true"] .cat-sleep-mask {
-  opacity: 1;
-  transform: translateY(0);
-  transition: opacity 0.2s ease, transform 0.2s ease;
-}
-
-.tracking-mask-switch[aria-checked="true"] .cat-eyes-open {
-  opacity: 0;
-}
 
 /* --------------------------------------------------------------------------
    My Ducks & Garden Shelf Modal (/progress)
@@ -3835,26 +3736,6 @@ body {
     font-size: 1.25rem;
   }
 
-  .hub-tracking-corner {
-    position: static;
-    align-self: flex-end;
-  }
-
-  .tracking-mask-switch {
-    width: 104px;
-    height: 54px;
-    min-width: 104px;
-    min-height: 54px;
-  }
-
-  .tracking-cat-knob {
-    width: 42px;
-    height: 42px;
-  }
-
-  .tracking-mask-switch[aria-checked="true"] .tracking-cat-knob {
-    transform: translateX(47px);
-  }
 }
 
 

@@ -41,7 +41,6 @@ const LOCK_HOLD_DURATION_MS = 2000;
 const RING_CIRCUMFERENCE = 120;
 const SELECTED_LEVEL_KEY = 'hottub_selected_level_v1';
 const SELECTED_MODE_KEY = 'hottub_selected_mode_v1';
-const TRACKING_MODE_KEY = 'hottub_tracking_mode_v1';
 const START_POP_DELAY_MS = 400;
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -83,9 +82,6 @@ function initApp() {
   const wordsDueBubble = document.getElementById('words-due-bubble');
   const wordsDueCount = document.getElementById('words-due-count');
   const wordsDueSub = document.getElementById('words-due-sub');
-  const btnTrackingToggle = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-tracking-toggle'));
-  const trackingToggleLabel = document.getElementById('tracking-toggle-label');
-  const trackingCaptionEmoji = document.getElementById('tracking-caption-emoji');
 
   // My Ducks (/progress) Modal DOM References
   const ducksProgressModal = document.getElementById('ducks-progress-modal');
@@ -187,11 +183,10 @@ function initApp() {
     }, duration);
   }
 
-  // --- Play Hub State: Cover-Flow Level Carousel (2 to 10 Levels), Mode, and Sleep Mask Tracking Toggle ---
+  // --- Play Hub State: Cover-Flow Level Carousel (2 to 10 Levels) and Mode ---
   let selectedLevel = 'bathtub';
   let selectedMode = '3';
   let userExplicitlyChangedModeInSession = false;
-  let isPracticeMode = false;
 
   const CAROUSEL_POS_CLASSES = [
     'pos-center',
@@ -273,29 +268,6 @@ function initApp() {
       // Ignore storage errors
     }
     return validIds[0] || 'bathtub';
-  }
-
-  function loadInitialTrackingMode() {
-    const today = getLocalISODate();
-    try {
-      const raw = window.localStorage.getItem(TRACKING_MODE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object') {
-          // Auto-reset Just for Fun mode back to Counting: ON the next day
-          if (parsed.date === today && parsed.practiceMode === true) {
-            return true;
-          }
-          window.localStorage.setItem(
-            TRACKING_MODE_KEY,
-            JSON.stringify({ practiceMode: false, date: today })
-          );
-        }
-      }
-    } catch {
-      // Ignore storage errors
-    }
-    return false;
   }
 
   function applyLevelSelection(level, playAudio = false) {
@@ -383,66 +355,8 @@ function initApp() {
       });
     }
   }
-
-  let profileBeforePractice = null;
-
-  function applyTrackingMode(practiceModeOn, playAudio = false) {
-    const wasPracticeMode = isPracticeMode;
-    isPracticeMode = Boolean(practiceModeOn);
-    const today = getLocalISODate();
-    try {
-      window.localStorage.setItem(
-        TRACKING_MODE_KEY,
-        JSON.stringify({ practiceMode: isPracticeMode, date: today })
-      );
-    } catch {
-      // Ignore storage errors
-    }
-
-    if (btnTrackingToggle) {
-      btnTrackingToggle.setAttribute('aria-checked', isPracticeMode ? 'true' : 'false');
-    }
-    if (trackingToggleLabel) {
-      trackingToggleLabel.textContent = isPracticeMode ? 'Just for Fun' : 'Counting: ON';
-    }
-    if (trackingCaptionEmoji) {
-      trackingCaptionEmoji.textContent = isPracticeMode ? '😴' : '👀';
-    }
-    if (startOverlay) {
-      startOverlay.classList.toggle('is-practice-mode', isPracticeMode);
-    }
-    if (wordsDueBubble) {
-      wordsDueBubble.hidden = isPracticeMode;
-    }
-
-    if (isPracticeMode) {
-      const currentActive = getActiveProfileId();
-      if (currentActive !== 'test') {
-        profileBeforePractice = currentActive;
-      }
-      switchActiveProfile('test', playAudio);
-    } else if (wasPracticeMode) {
-      const learner = getSessionLearnerProfile();
-      const targetProfile =
-        profileBeforePractice && profileBeforePractice !== 'test'
-          ? profileBeforePractice
-          : learner
-          ? learner.id
-          : 'daughter';
-      switchActiveProfile(targetProfile, playAudio);
-    }
-
-    if (playAudio) {
-      soundEngine.unlockAudio().then(() => {
-        soundEngine.playSleepMaskToggle(isPracticeMode);
-      });
-    }
-  }
-
   selectedLevel = loadInitialLevel();
-  isPracticeMode = loadInitialTrackingMode();
   applyLevelSelection(selectedLevel, false);
-  applyTrackingMode(isPracticeMode, false);
 
   if (levelSelectGroup) {
     levelSelectGroup.addEventListener('click', (ev) => {
@@ -502,12 +416,6 @@ function initApp() {
     });
   }
 
-  if (btnTrackingToggle) {
-    btnTrackingToggle.addEventListener('click', () => {
-      applyTrackingMode(!isPracticeMode, true);
-    });
-  }
-
   // Instantiate Core Game Engine
   const game = new HotTubGame({
     bubbleStage: document.getElementById('bubble-stage'),
@@ -521,8 +429,6 @@ function initApp() {
     retryBadge: document.getElementById('retry-badge'),
 
     onFirstAttemptComplete: (wordStr, firstAttemptErrors, attemptDetails = {}) => {
-      // Secret Practice ("Just for Fun" sleep mask on): scores do not count right now
-      if (isPracticeMode) return;
       const updatedRecord = recordFirstAttemptSRS(wordStr, firstAttemptErrors, attemptDetails);
       if (updatedRecord) {
         syncManager.queueWordUpdate(updatedRecord).catch(() => {});
@@ -530,7 +436,6 @@ function initApp() {
     },
 
     onTrapError: (_trapCategory, updatedHistory) => {
-      if (isPracticeMode) return;
       syncManager.queueTrapHistoryUpdate(getActiveProfileId(), updatedHistory).catch(() => {});
     },
 
@@ -1124,7 +1029,7 @@ function initApp() {
 
     // Floating Iridescent Soap Bubble Badge ("Words Due Today")
     if (wordsDueBubble && wordsDueCount && wordsDueSub) {
-      wordsDueBubble.hidden = isPracticeMode;
+      wordsDueBubble.hidden = false;
       if (dueCount > 0) {
         wordsDueBubble.classList.remove('is-all-done');
         wordsDueCount.textContent = String(dueCount);
@@ -1244,10 +1149,7 @@ function initApp() {
     // 3. 400ms bubble pop animation
     await new Promise((resolve) => setTimeout(resolve, START_POP_DELAY_MS));
 
-    // 4. Build session word list (ensure test profile if Just for Fun is selected)
-    if (isPracticeMode && getActiveProfileId() !== 'test') {
-      switchActiveProfile('test', false);
-    }
+    // 4. Build session word list
     const allWords = loadWords();
     let sessionWords = useQuickMode
       ? buildSessionWords(allWords, 3, 3, { ...options, quickSplash: true })

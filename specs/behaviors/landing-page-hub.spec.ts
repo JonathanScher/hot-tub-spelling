@@ -191,7 +191,7 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
     });
   });
 
-  describe('3. Words Due Soap Bubble Badge & Sleep Mask Tracking Toggle', () => {
+  describe('3. Words Due Soap Bubble Badge & Absence of Just for Fun Toggle', () => {
     it('displays the due word count in the floating bubble and shows a gold star when 0 words are due', async () => {
       // GIVEN an authenticated session with starter words due today
       setMockAuthUser({ email: 'scher.jonathan@gmail.com', displayName: 'Zoé' });
@@ -221,69 +221,19 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
       expect(wordsDueSub.textContent).toBe('All done! Free play!');
     });
 
-    it('toggles Secret Practice ("Just for Fun") via the white cat sleep mask and auto-resets the next day', async () => {
-      // GIVEN a stale "Just for Fun" tracking state saved from yesterday
-      localStorage.setItem(
-        'hottub_tracking_mode_v1',
-        JSON.stringify({ practiceMode: true, date: '2000-01-01' })
-      );
-
-      // Re-initialize app on a new day
-      document.documentElement.innerHTML = sanitizedHtml;
-      document.dispatchEvent(new Event('DOMContentLoaded'));
+    it('does not render the Just for Fun button on the title screen and preserves active profile under parent lock', async () => {
+      // GIVEN an authenticated Play Hub session
       setMockAuthUser({ email: 'scher.jonathan@gmail.com', displayName: 'Zoé' });
       await Promise.resolve();
 
+      // THEN the Just for Fun toggle button and its caption are absent from the DOM
+      expect(document.getElementById('btn-tracking-toggle')).toBeNull();
+      expect(document.getElementById('tracking-toggle-label')).toBeNull();
+      expect(document.querySelector('.hub-tracking-corner')).toBeNull();
+
+      // AND the title screen overlay does not have practice mode applied
       const startOverlay = document.getElementById('start-overlay') as HTMLElement;
-      const btnTrackingToggle = document.getElementById('btn-tracking-toggle') as HTMLButtonElement;
-      const trackingToggleLabel = document.getElementById('tracking-toggle-label') as HTMLElement;
-      const wordsDueBubble = document.getElementById('words-due-bubble') as HTMLElement;
-
-      // THEN it automatically resets back to "Counting: ON" for today
-      expect(btnTrackingToggle.getAttribute('aria-checked')).toBe('false');
-      expect(trackingToggleLabel.textContent).toBe('Counting: ON');
       expect(startOverlay.classList.contains('is-practice-mode')).toBe(false);
-      expect(wordsDueBubble.hidden).toBe(false);
-
-      // WHEN toggling the white cat's pink sleep mask ON
-      btnTrackingToggle.click();
-      await Promise.resolve();
-
-      // THEN label updates to "Just for Fun", twilight filter class is applied, and due bubble hides
-      expect(btnTrackingToggle.getAttribute('aria-checked')).toBe('true');
-      expect(trackingToggleLabel.textContent).toBe('Just for Fun');
-      expect(startOverlay.classList.contains('is-practice-mode')).toBe(true);
-      expect(wordsDueBubble.hidden).toBe(true);
-      expect(soundEngine.playSleepMaskToggle).toHaveBeenCalledWith(true);
-    });
-
-    it('launches the game with test profile when "Just for Fun" is selected and restores learner profile when toggled off', async () => {
-      // GIVEN an authenticated session with active profile set to 'daughter'
-      setMockAuthUser({ email: 'scher.jonathan@gmail.com', displayName: 'Zoé' });
-      await Promise.resolve();
-      setActiveProfileId('daughter');
-      expect(getActiveProfileId()).toBe('daughter');
-
-      const btnTrackingToggle = document.getElementById('btn-tracking-toggle') as HTMLButtonElement;
-      const btnPlay = document.getElementById('btn-play') as HTMLButtonElement;
-
-      // WHEN "Just for Fun" is selected
-      btnTrackingToggle.click();
-      await Promise.resolve();
-
-      // AND the game is launched
-      btnPlay.click();
-      await vi.advanceTimersByTimeAsync(500);
-
-      // THEN the game launches with the test profile
-      expect(getActiveProfileId()).toBe('test');
-
-      // WHEN "Just for Fun" is toggled off (Counting: ON)
-      btnTrackingToggle.click();
-      await Promise.resolve();
-
-      // THEN the learner profile is restored
-      expect(getActiveProfileId()).toBe('daughter');
     });
   });
 
