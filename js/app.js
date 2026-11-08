@@ -237,7 +237,7 @@ function initApp() {
     cards.forEach((card, idx) => {
       const levelId = card.getAttribute('data-level') || '';
       const labelEl = card.querySelector('.level-card-label');
-      const levelTitle = (labelEl && labelEl.textContent) || card.getAttribute('aria-label') || `Level ${idx + 1}`;
+      const levelTitle = card.getAttribute('aria-label') || (labelEl && labelEl.textContent) || `Level ${idx + 1}`;
       const isSelected = idx === activeIdx;
 
       const dot = document.createElement('button');
@@ -293,11 +293,6 @@ function initApp() {
       card.classList.remove(...CAROUSEL_POS_CLASSES);
       card.classList.add(posClass);
       card.setAttribute('data-carousel-pos', posClass);
-
-      const stepCounter = card.querySelector('.level-step-counter');
-      if (stepCounter) {
-        stepCounter.textContent = `Level ${idx + 1} of ${total}`;
-      }
     });
 
     renderLevelCarouselDots(cards, activeIdx);
