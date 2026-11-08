@@ -339,63 +339,92 @@
 
         <!-- Row 2: Center Stage (Level Select Cards & Rubber Duck Mode Toggle) -->
         <div class="hub-center-stage">
-          <!-- Binary Visual Level Select: Cozy Bathtub vs. Chest Opening -->
-          <div id="level-select-group" class="hub-level-cards" role="radiogroup" aria-label="Select game level">
-            <button
-              type="button"
-              id="card-level-bathtub"
-              class="level-polaroid-card is-selected"
-              data-level="bathtub"
-              role="radio"
-              aria-checked="true"
-              aria-label="Cozy Bathtub"
-            >
-              <span class="level-bubble-aura" aria-hidden="true"></span>
-              <span class="level-card-label">Cozy Bathtub</span>
-              <span class="level-card-art">
-                <img
-                  src="assets/card-cozy-bathtub.jpg"
-                  alt="Orange cat relaxing in a cozy bathtub"
-                  class="level-card-img cat-breathing"
-                  onerror="this.style.display='none'"
-                />
-              </span>
-              <span class="level-card-pips" aria-hidden="true">
-                <span class="level-pip is-hollow"></span>
-                <span class="level-pip"></span>
-                <span class="level-pip"></span>
-                <span class="level-pip"></span>
-                <span class="level-pip"></span>
-              </span>
-            </button>
+          <!-- Center-Stage "Cover Flow" Level Carousel (Supports 2 to 10 Levels) -->
+          <div id="level-carousel" class="hub-level-carousel" aria-label="Game level carousel">
+            <div class="level-carousel-main">
+              <button
+                type="button"
+                id="btn-level-prev"
+                class="carousel-paddle-btn carousel-paddle-prev"
+                aria-label="Previous level"
+                title="Previous level"
+              >
+                <span aria-hidden="true">◀</span>
+              </button>
 
-            <button
-              type="button"
-              id="card-level-chest"
-              class="level-polaroid-card"
-              data-level="chest"
-              role="radio"
-              aria-checked="false"
-              aria-label="Chest Opening"
-            >
-              <span class="level-bubble-aura" aria-hidden="true"></span>
-              <span class="level-card-label">Chest Opening</span>
-              <span class="level-card-art">
-                <img
-                  src="assets/card-chest-opening.jpg"
-                  alt="Glowing wooden treasure chest filled with gold coins"
-                  class="level-card-img"
-                  onerror="this.style.display='none'"
-                />
-              </span>
-              <span class="level-card-pips" aria-hidden="true">
-                <span class="level-pip"></span>
-                <span class="level-pip"></span>
-                <span class="level-pip"></span>
-                <span class="level-pip"></span>
-                <span class="level-pip"></span>
-              </span>
-            </button>
+              <div id="level-select-group" class="hub-level-cards carousel-stage-track" role="radiogroup" aria-label="Select game level">
+                <button
+                  type="button"
+                  id="card-level-bathtub"
+                  class="level-polaroid-card is-selected pos-center"
+                  data-level="bathtub"
+                  role="radio"
+                  aria-checked="true"
+                  aria-label="Cozy Bathtub"
+                >
+                  <span class="level-selected-crest" aria-hidden="true">★ Selected</span>
+                  <span class="level-step-counter" aria-hidden="true">Level 1 of 2</span>
+                  <span class="level-card-art">
+                    <img
+                      src="assets/card-cozy-bathtub.jpg"
+                      alt="Orange cat relaxing in a cozy bathtub"
+                      class="level-card-img cat-breathing"
+                      onerror="this.style.display='none'"
+                    />
+                  </span>
+                  <span class="level-card-label">Cozy Bathtub</span>
+                  <span class="level-card-pips" aria-hidden="true">
+                    <span class="level-pip is-hollow"></span>
+                    <span class="level-pip"></span>
+                    <span class="level-pip"></span>
+                    <span class="level-pip"></span>
+                    <span class="level-pip"></span>
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  id="card-level-chest"
+                  class="level-polaroid-card pos-right"
+                  data-level="chest"
+                  role="radio"
+                  aria-checked="false"
+                  aria-label="Chest Opening"
+                >
+                  <span class="level-selected-crest" aria-hidden="true">★ Selected</span>
+                  <span class="level-step-counter" aria-hidden="true">Level 2 of 2</span>
+                  <span class="level-card-art">
+                    <img
+                      src="assets/card-chest-opening.jpg"
+                      alt="Glowing wooden treasure chest filled with gold coins"
+                      class="level-card-img"
+                      onerror="this.style.display='none'"
+                    />
+                  </span>
+                  <span class="level-card-label">Chest Opening</span>
+                  <span class="level-card-pips" aria-hidden="true">
+                    <span class="level-pip"></span>
+                    <span class="level-pip"></span>
+                    <span class="level-pip"></span>
+                    <span class="level-pip"></span>
+                    <span class="level-pip"></span>
+                  </span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                id="btn-level-next"
+                class="carousel-paddle-btn carousel-paddle-next"
+                aria-label="Next level"
+                title="Next level"
+              >
+                <span aria-hidden="true">▶</span>
+              </button>
+            </div>
+
+            <!-- Pebble Step Dots (Scales dynamically from 2 to 10 levels) -->
+            <div id="level-carousel-dots" class="level-carousel-dots" aria-label="Level step indicators"></div>
           </div>
 
           <!-- Segmented Wooden Pill Mode Toggle: 3 Rubber Ducks ("Quick Splash") vs. 10 Rubber Ducks ("Big Soak") -->

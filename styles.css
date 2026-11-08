@@ -2975,7 +2975,7 @@ body {
   box-shadow: 0 3px 0 var(--green-btn-bevel), 0 0 10px rgba(91, 170, 59, 0.45);
 }
 
-/* Row 2: Center Stage (60% height desktop — Level Cards & Mode Toggle) */
+/* Row 2: Center Stage (60% height desktop — Cover-Flow Level Carousel & Mode Toggle) */
 .hub-center-stage {
   flex: 1 1 auto;
   width: 100%;
@@ -2983,104 +2983,223 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 32px;
-  padding: 6px 0;
+  gap: 22px;
+  padding: 4px 0;
 }
 
-.hub-level-cards {
+.hub-level-carousel {
+  width: 100%;
+  max-width: 720px;
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.level-carousel-main {
+  width: 100%;
+  display: flex;
   align-items: center;
   justify-content: center;
-  gap: 48px;
+  gap: 12px;
 }
 
-/* Square Wooden / Cream Polaroid Level Cards (220x220px desktop, 140x140px mobile) */
-.level-polaroid-card {
+/* Chunky Wooden Paddle Buttons (◀ / ▶) */
+.carousel-paddle-btn {
+  width: 52px;
+  height: 52px;
+  min-width: 52px;
+  min-height: 52px;
+  border-radius: 50%;
+  border: 2.5px solid #5C3A21;
+  background:
+    repeating-linear-gradient(180deg,
+      rgba(255, 255, 255, 0.08) 0px,
+      rgba(255, 255, 255, 0.08) 2px,
+      transparent 2px,
+      transparent 8px
+    ),
+    linear-gradient(180deg, #DFBA92 0%, #C7996B 55%, #AE7E4E 100%);
+  color: #3B210E;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  z-index: 12;
+  box-shadow:
+    0 4px 0 #4A2C16,
+    0 6px 14px rgba(60, 35, 15, 0.18),
+    inset 0 2px 0 rgba(255, 244, 230, 0.7);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.15s ease;
+}
+
+.carousel-paddle-btn:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.04);
+}
+
+.carousel-paddle-btn:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow:
+    0 1px 0 #4A2C16,
+    0 2px 6px rgba(60, 35, 15, 0.16),
+    inset 0 1px 0 rgba(255, 244, 230, 0.65);
+}
+
+.carousel-paddle-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* Cover-Flow Stage Track (Supports 2 to 10 Level Cards) */
+.hub-level-cards.carousel-stage-track {
   position: relative;
-  width: 220px;
-  height: 220px;
+  flex: 1 1 auto;
+  height: 248px;
+  min-width: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+  touch-action: pan-y;
+}
+
+/* Square Wooden / Cream Polaroid Level Cards */
+.level-polaroid-card {
+  position: absolute;
+  width: 212px;
+  height: 216px;
   border-radius: 24px;
   border: 2.5px solid #5C3A21;
   background: linear-gradient(180deg, #F5E7D3 0%, #EEDAC0 100%);
-  padding: 14px 12px 12px;
+  padding: 16px 12px 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
   cursor: pointer;
-  opacity: 0.8;
-  transform: scale(1);
+  opacity: 0.72;
+  transform: translateX(0) translateY(8px) scale(0.82);
   box-shadow:
     0 5px 0 rgba(92, 58, 33, 0.35),
     0 10px 22px rgba(60, 35, 15, 0.12),
     inset 0 2px 0 rgba(255, 252, 245, 0.75);
-  transition: transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.22s ease, box-shadow 0.24s ease;
-}
-
-.level-polaroid-card:hover {
-  opacity: 0.95;
-}
-
-.level-polaroid-card.is-selected {
-  opacity: 1;
-  transform: scale(1.08);
-  border-color: #5C3A21;
-  box-shadow:
-    0 8px 0 rgba(92, 58, 33, 0.32),
-    0 0 0 4px rgba(175, 236, 255, 0.85),
-    0 16px 34px rgba(88, 175, 210, 0.28),
-    inset 0 2px 0 rgba(255, 255, 255, 0.9);
+  transition:
+    transform 0.32s cubic-bezier(0.34, 1.46, 0.64, 1),
+    opacity 0.24s ease,
+    box-shadow 0.24s ease,
+    border-color 0.2s ease,
+    background 0.2s ease;
   z-index: 4;
 }
 
-/* Iridescent Soap Bubble Aura around Selected Level Card */
-.level-bubble-aura {
-  position: absolute;
-  inset: -16px;
-  border-radius: 50%;
-  pointer-events: none;
+.level-polaroid-card:hover {
+  opacity: 0.92;
+}
+
+/* Cover-Flow Spatial Positions (Center, Left/Right Neighbors, Far Neighbors, Hidden) */
+.level-polaroid-card.pos-left {
+  transform: translateX(-168px) translateY(10px) scale(0.82) rotate(-4deg);
+  opacity: 0.74;
+  z-index: 5;
+}
+
+.level-polaroid-card.pos-right {
+  transform: translateX(168px) translateY(10px) scale(0.82) rotate(4deg);
+  opacity: 0.74;
+  z-index: 5;
+}
+
+.level-polaroid-card.pos-far-left {
+  transform: translateX(-272px) translateY(18px) scale(0.66) rotate(-7deg);
+  opacity: 0.32;
+  z-index: 2;
+}
+
+.level-polaroid-card.pos-far-right {
+  transform: translateX(272px) translateY(18px) scale(0.66) rotate(7deg);
+  opacity: 0.32;
+  z-index: 2;
+}
+
+.level-polaroid-card.pos-hidden {
+  transform: translateX(0) translateY(20px) scale(0.5);
   opacity: 0;
-  transform: scale(0.88);
-  background:
-    radial-gradient(circle at 26% 22%, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0.2) 16%, transparent 32%),
-    radial-gradient(circle at 78% 78%, rgba(255, 255, 255, 0.55) 0%, transparent 24%),
-    radial-gradient(circle at 50% 50%,
-      transparent 54%,
-      rgba(162, 234, 252, 0.32) 66%,
-      rgba(246, 182, 218, 0.38) 78%,
-      rgba(176, 242, 255, 0.62) 88%,
-      rgba(255, 255, 255, 0.92) 96%,
-      transparent 100%
-    );
-  border: 2.5px solid rgba(255, 255, 255, 0.88);
-  box-shadow:
-    0 0 22px rgba(145, 228, 250, 0.65),
-    inset 0 0 18px rgba(255, 255, 255, 0.75);
-  transition: opacity 0.28s ease, transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
-  z-index: 3;
+  pointer-events: none;
+  z-index: 0;
 }
 
-.level-polaroid-card.is-selected .level-bubble-aura {
+/* Selected / Center Card: Double-Bevel Sage & Gold Frame + Upward Lift (Zero Artwork Obstruction) */
+.level-polaroid-card.is-selected,
+.level-polaroid-card.pos-center {
   opacity: 1;
-  transform: scale(1.02);
-  animation: auraBubblePulse 3.2s ease-in-out infinite;
+  transform: translateX(0) translateY(-6px) scale(1.04);
+  background: linear-gradient(180deg, #FFFDF9 0%, #F7E8D0 100%);
+  border: 3px solid #3B6E28;
+  box-shadow:
+    0 7px 0 #28541D,
+    0 0 0 4px #FAD246,
+    0 16px 32px rgba(60, 35, 15, 0.22),
+    inset 0 2px 0 #FFFFFF;
+  z-index: 10;
 }
 
-@keyframes auraBubblePulse {
-  0%, 100% { transform: scale(1.01); }
-  50% { transform: scale(1.04); }
+/* Top "★ Selected" Pill Crest on Active Card */
+.level-selected-crest {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%) scale(0.85);
+  background: linear-gradient(180deg, #6FD25A 0%, #48A834 100%);
+  color: #FFFDF8;
+  border: 2px solid #28541D;
+  border-radius: 999px;
+  padding: 2px 12px;
+  font-family: var(--font-display);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-shadow: 0 1px 1px #1F4416;
+  box-shadow: 0 2px 0 #234E19, 0 4px 8px rgba(40, 84, 29, 0.25);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 12;
+}
+
+.level-polaroid-card.is-selected .level-selected-crest {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+
+.level-step-counter {
+  position: relative;
+  z-index: 2;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6E492A;
+  line-height: 1;
+  margin-bottom: 2px;
 }
 
 .level-card-label {
   position: relative;
   z-index: 2;
   font-family: var(--font-display);
-  font-size: 1.24rem;
+  font-size: 1.18rem;
   font-weight: 700;
   color: #3E2210;
   line-height: 1.15;
   text-align: center;
+  margin-top: 4px;
 }
 
 .level-card-art {
@@ -3122,6 +3241,40 @@ body {
 
 .level-pip.is-hollow {
   background: rgba(255, 252, 245, 0.65);
+}
+
+/* Pebble Step Dots Row (Supports 2 to 10 Levels) */
+.level-carousel-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 18px;
+  z-index: 10;
+}
+
+.level-pebble-dot {
+  width: 13px;
+  height: 13px;
+  padding: 0;
+  border-radius: 999px;
+  border: 2px solid #5C3A21;
+  background: #D8BE9E;
+  cursor: pointer;
+  box-shadow: 0 2px 0 rgba(74, 44, 22, 0.45);
+  transition: width 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, transform 0.15s ease;
+}
+
+.level-pebble-dot:hover {
+  transform: scale(1.15);
+  background: #E8D2B5;
+}
+
+.level-pebble-dot.is-active {
+  width: 30px;
+  background: linear-gradient(180deg, #6FD25A 0%, #48A834 100%);
+  border-color: #28541D;
+  box-shadow: 0 2px 0 #234E19, 0 0 0 2px #FAD246;
 }
 
 /* Segmented Wooden Pill Mode Toggle (3 Rubber Ducks vs. 10 Rubber Ducks) */
@@ -3590,18 +3743,47 @@ body {
   }
 
   .hub-center-stage {
-    gap: 22px;
+    gap: 16px;
   }
 
-  .hub-level-cards {
-    gap: 18px;
+  .hub-level-cards.carousel-stage-track {
+    height: 190px;
+    min-width: 180px;
+  }
+
+  .carousel-paddle-btn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 1.05rem;
   }
 
   .level-polaroid-card {
-    width: 140px;
-    height: 162px;
-    padding: 10px 8px 8px;
+    width: 148px;
+    height: 168px;
+    padding: 12px 8px 8px;
     border-radius: 18px;
+  }
+
+  .level-polaroid-card.pos-left {
+    transform: translateX(-98px) translateY(8px) scale(0.8) rotate(-4deg);
+  }
+
+  .level-polaroid-card.pos-right {
+    transform: translateX(98px) translateY(8px) scale(0.8) rotate(4deg);
+  }
+
+  .level-polaroid-card.pos-far-left {
+    transform: translateX(-140px) translateY(14px) scale(0.62) rotate(-6deg);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .level-polaroid-card.pos-far-right {
+    transform: translateX(140px) translateY(14px) scale(0.62) rotate(6deg);
+    opacity: 0;
+    pointer-events: none;
   }
 
   .level-card-label {
@@ -3610,10 +3792,6 @@ body {
 
   .level-card-pips {
     display: flex;
-  }
-
-  .level-bubble-aura {
-    inset: -10px;
   }
 
   .hub-mode-pill {

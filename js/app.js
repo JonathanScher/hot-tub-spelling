@@ -72,6 +72,10 @@ function initApp() {
   const weekSelectorPopover = document.getElementById('week-selector-popover');
   const weekTilesGrid = document.getElementById('week-tiles-grid');
   const btnMyDucks = document.getElementById('btn-my-ducks');
+  const levelSelectGroup = document.getElementById('level-select-group');
+  const btnLevelPrev = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-level-prev'));
+  const btnLevelNext = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-level-next'));
+  const levelCarouselDots = document.getElementById('level-carousel-dots');
   const cardLevelBathtub = /** @type {HTMLButtonElement | null} */ (document.getElementById('card-level-bathtub'));
   const cardLevelChest = /** @type {HTMLButtonElement | null} */ (document.getElementById('card-level-chest'));
   const btnMode3 = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-mode-3'));
@@ -183,22 +187,92 @@ function initApp() {
     }, duration);
   }
 
-  // --- Play Hub State: Level, Mode, and Sleep Mask Tracking Toggle ---
+  // --- Play Hub State: Cover-Flow Level Carousel (2 to 10 Levels), Mode, and Sleep Mask Tracking Toggle ---
   let selectedLevel = 'bathtub';
   let selectedMode = '3';
   let userExplicitlyChangedModeInSession = false;
   let isPracticeMode = false;
 
+  const CAROUSEL_POS_CLASSES = [
+    'pos-center',
+    'pos-left',
+    'pos-right',
+    'pos-far-left',
+    'pos-far-right',
+    'pos-hidden'
+  ];
+
+  function getLevelCards() {
+    if (!levelSelectGroup) {
+      return [cardLevelBathtub, cardLevelChest].filter(Boolean);
+    }
+    return /** @type {HTMLButtonElement[]} */ (
+      Array.from(levelSelectGroup.querySelectorAll('.level-polaroid-card[data-level]'))
+    );
+  }
+
+  function computeCarouselPositionClass(idx, activeIdx, total) {
+    if (idx === activeIdx) return 'pos-center';
+    if (total <= 1) return 'pos-center';
+    if (total === 2) {
+      return activeIdx === 0 ? 'pos-right' : 'pos-left';
+    }
+    let diff = idx - activeIdx;
+    const half = Math.floor(total / 2);
+    const negHalf = -Math.floor((total - 1) / 2);
+    while (diff > half) diff -= total;
+    while (diff < negHalf) diff += total;
+
+    if (diff === -1) return 'pos-left';
+    if (diff === 1) return 'pos-right';
+    if (diff === -2 && total >= 4) return 'pos-far-left';
+    if (diff === 2 && total >= 4) return 'pos-far-right';
+    return 'pos-hidden';
+  }
+
+  function renderLevelCarouselDots(cards, activeIdx) {
+    if (!levelCarouselDots) return;
+    levelCarouselDots.innerHTML = '';
+    const total = cards.length;
+    if (total <= 1) {
+      levelCarouselDots.hidden = true;
+      return;
+    }
+    levelCarouselDots.hidden = false;
+
+    cards.forEach((card, idx) => {
+      const levelId = card.getAttribute('data-level') || '';
+      const labelEl = card.querySelector('.level-card-label');
+      const levelTitle = (labelEl && labelEl.textContent) || card.getAttribute('aria-label') || `Level ${idx + 1}`;
+      const isSelected = idx === activeIdx;
+
+      const dot = document.createElement('button');
+      dot.type = 'button';
+      dot.className = `level-pebble-dot${isSelected ? ' is-active' : ''}`;
+      dot.setAttribute('data-level', levelId);
+      dot.setAttribute('data-level-index', String(idx));
+      dot.setAttribute('aria-label', `Select level ${idx + 1} of ${total}: ${levelTitle}`);
+      dot.setAttribute('aria-current', isSelected ? 'true' : 'false');
+      dot.title = `${levelTitle} (${idx + 1}/${total})`;
+      dot.addEventListener('click', () => {
+        applyLevelSelection(levelId, true);
+      });
+      levelCarouselDots.appendChild(dot);
+    });
+  }
+
   function loadInitialLevel() {
+    const cards = getLevelCards();
+    const validIds = cards.map((c) => c.getAttribute('data-level')).filter(Boolean);
     try {
       const saved = window.localStorage.getItem(SELECTED_LEVEL_KEY);
-      if (saved === 'chest' || saved === 'bathtub') {
+      if (saved && (validIds.includes(saved) || saved === 'chest' || saved === 'bathtub')) {
         return saved;
       }
     } catch {
       // Ignore storage errors
     }
-    return 'bathtub';
+    return validIds[0] || 'bathtub';
   }
 
   function loadInitialTrackingMode() {
@@ -225,22 +299,38 @@ function initApp() {
   }
 
   function applyLevelSelection(level, playAudio = false) {
-    selectedLevel = level === 'chest' ? 'chest' : 'bathtub';
+    const cards = getLevelCards();
+    const validIds = cards.map((c) => c.getAttribute('data-level')).filter(Boolean);
+    const fallbackId = validIds[0] || 'bathtub';
+    selectedLevel = validIds.includes(level) ? level : level === 'chest' ? 'chest' : fallbackId;
+
     try {
       window.localStorage.setItem(SELECTED_LEVEL_KEY, selectedLevel);
     } catch {
       // Ignore storage errors
     }
-    if (cardLevelBathtub) {
-      const isBathtub = selectedLevel === 'bathtub';
-      cardLevelBathtub.classList.toggle('is-selected', isBathtub);
-      cardLevelBathtub.setAttribute('aria-checked', isBathtub ? 'true' : 'false');
-    }
-    if (cardLevelChest) {
-      const isChest = selectedLevel === 'chest';
-      cardLevelChest.classList.toggle('is-selected', isChest);
-      cardLevelChest.setAttribute('aria-checked', isChest ? 'true' : 'false');
-    }
+
+    let activeIdx = cards.findIndex((c) => c.getAttribute('data-level') === selectedLevel);
+    if (activeIdx < 0) activeIdx = 0;
+    const total = cards.length;
+
+    cards.forEach((card, idx) => {
+      const isSelected = idx === activeIdx;
+      const posClass = computeCarouselPositionClass(idx, activeIdx, total);
+      card.classList.toggle('is-selected', isSelected);
+      card.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+      card.classList.remove(...CAROUSEL_POS_CLASSES);
+      card.classList.add(posClass);
+      card.setAttribute('data-carousel-pos', posClass);
+
+      const stepCounter = card.querySelector('.level-step-counter');
+      if (stepCounter) {
+        stepCounter.textContent = `Level ${idx + 1} of ${total}`;
+      }
+    });
+
+    renderLevelCarouselDots(cards, activeIdx);
+
     if (appShell) {
       appShell.setAttribute('data-selected-level', selectedLevel);
     }
@@ -253,6 +343,18 @@ function initApp() {
         }
       });
     }
+  }
+
+  function stepCarouselBy(delta) {
+    const cards = getLevelCards();
+    if (cards.length === 0) return;
+    const currentIdx = Math.max(
+      0,
+      cards.findIndex((c) => c.getAttribute('data-level') === selectedLevel)
+    );
+    const nextIdx = (currentIdx + delta + cards.length) % cards.length;
+    const targetLevel = cards[nextIdx].getAttribute('data-level') || 'bathtub';
+    applyLevelSelection(targetLevel, true);
   }
 
   function applyModeSelection(mode, playAudio = false, isUserAction = false) {
@@ -342,14 +444,50 @@ function initApp() {
   applyLevelSelection(selectedLevel, false);
   applyTrackingMode(isPracticeMode, false);
 
-  if (cardLevelBathtub) {
-    cardLevelBathtub.addEventListener('click', () => {
-      applyLevelSelection('bathtub', true);
+  if (levelSelectGroup) {
+    levelSelectGroup.addEventListener('click', (ev) => {
+      const target = /** @type {HTMLElement | null} */ (ev.target);
+      const card = target ? target.closest('.level-polaroid-card[data-level]') : null;
+      if (card) {
+        const levelId = card.getAttribute('data-level');
+        if (levelId) {
+          applyLevelSelection(levelId, true);
+        }
+      }
+    });
+
+    levelSelectGroup.addEventListener('keydown', (ev) => {
+      if (ev.key === 'ArrowRight' || ev.key === 'ArrowDown') {
+        ev.preventDefault();
+        stepCarouselBy(1);
+      } else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowUp') {
+        ev.preventDefault();
+        stepCarouselBy(-1);
+      }
+    });
+
+    let swipeStartX = null;
+    levelSelectGroup.addEventListener('pointerdown', (ev) => {
+      swipeStartX = ev.clientX;
+    });
+    levelSelectGroup.addEventListener('pointerup', (ev) => {
+      if (swipeStartX === null) return;
+      const dx = ev.clientX - swipeStartX;
+      swipeStartX = null;
+      if (Math.abs(dx) >= 36) {
+        stepCarouselBy(dx < 0 ? 1 : -1);
+      }
     });
   }
-  if (cardLevelChest) {
-    cardLevelChest.addEventListener('click', () => {
-      applyLevelSelection('chest', true);
+
+  if (btnLevelPrev) {
+    btnLevelPrev.addEventListener('click', () => {
+      stepCarouselBy(-1);
+    });
+  }
+  if (btnLevelNext) {
+    btnLevelNext.addEventListener('click', () => {
+      stepCarouselBy(1);
     });
   }
 

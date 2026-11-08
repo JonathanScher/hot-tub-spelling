@@ -117,6 +117,78 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
       expect(btnMode3.classList.contains('is-selected')).toBe(false);
       expect(soundEngine.playModeQuack).toHaveBeenCalledWith(10);
     });
+
+    it('renders the Cover-Flow Carousel with a Selected crest (no bubble aura), wooden paddles, pebble dots, and scales from 2 to 10 levels', async () => {
+      // GIVEN an authenticated session on the Play Hub
+      setMockAuthUser({ email: 'scher.jonathan@gmail.com', displayName: 'Zoé' });
+      await Promise.resolve();
+
+      const levelGroup = document.getElementById('level-select-group') as HTMLElement;
+      const cardBathtub = document.getElementById('card-level-bathtub') as HTMLButtonElement;
+      const cardChest = document.getElementById('card-level-chest') as HTMLButtonElement;
+      const btnNext = document.getElementById('btn-level-next') as HTMLButtonElement;
+      const btnPrev = document.getElementById('btn-level-prev') as HTMLButtonElement;
+      const dotsContainer = document.getElementById('level-carousel-dots') as HTMLElement;
+
+      // THEN no bubble aura overlay exists on level cards, and each card has a top Selected crest
+      expect(levelGroup.querySelector('.level-bubble-aura')).toBeNull();
+      expect(cardBathtub.querySelector('.level-selected-crest')).not.toBeNull();
+      expect(cardBathtub.classList.contains('pos-center')).toBe(true);
+      expect(cardChest.classList.contains('pos-right')).toBe(true);
+      expect(dotsContainer.querySelectorAll('.level-pebble-dot').length).toBe(2);
+
+      // WHEN clicking the right wooden paddle (▶)
+      btnNext.click();
+      await Promise.resolve();
+
+      // THEN Chest Opening moves to center stage and Cozy Bathtub peeks on the left
+      expect(cardChest.classList.contains('is-selected')).toBe(true);
+      expect(cardChest.classList.contains('pos-center')).toBe(true);
+      expect(cardBathtub.classList.contains('pos-left')).toBe(true);
+
+      // WHEN 8 additional level cards are added (totaling 10 levels) and a pebble dot is clicked
+      for (let i = 3; i <= 10; i++) {
+        const extraCard = document.createElement('button');
+        extraCard.type = 'button';
+        extraCard.className = 'level-polaroid-card';
+        extraCard.setAttribute('data-level', `level-${i}`);
+        extraCard.setAttribute('role', 'radio');
+        extraCard.setAttribute('aria-label', `Level ${i}`);
+        extraCard.innerHTML = `
+          <span class="level-selected-crest" aria-hidden="true">★ Selected</span>
+          <span class="level-step-counter" aria-hidden="true"></span>
+          <span class="level-card-label">Level ${i}</span>
+        `;
+        levelGroup.appendChild(extraCard);
+      }
+
+      // Trigger carousel refresh via prev paddle click (back to index 0: Cozy Bathtub)
+      btnPrev.click();
+      await Promise.resolve();
+
+      // THEN all 10 pebble step dots render and Cover-Flow assigns center, left/right, far-left/far-right, and hidden positions
+      const dots = dotsContainer.querySelectorAll('.level-pebble-dot');
+      expect(dots.length).toBe(10);
+      expect(cardBathtub.classList.contains('pos-center')).toBe(true);
+      expect(cardChest.classList.contains('pos-right')).toBe(true);
+      const level3Card = levelGroup.querySelector('[data-level="level-3"]') as HTMLElement;
+      const level6Card = levelGroup.querySelector('[data-level="level-6"]') as HTMLElement;
+      const level9Card = levelGroup.querySelector('[data-level="level-9"]') as HTMLElement;
+      const level10Card = levelGroup.querySelector('[data-level="level-10"]') as HTMLElement;
+      expect(level3Card.classList.contains('pos-far-right')).toBe(true);
+      expect(level6Card.classList.contains('pos-hidden')).toBe(true);
+      expect(level9Card.classList.contains('pos-far-left')).toBe(true);
+      expect(level10Card.classList.contains('pos-left')).toBe(true);
+
+      // WHEN clicking the 6th pebble dot directly
+      (dots[5] as HTMLButtonElement).click();
+      await Promise.resolve();
+
+      // THEN Level 6 moves to center stage and is selected
+      expect(level6Card.classList.contains('is-selected')).toBe(true);
+      expect(level6Card.classList.contains('pos-center')).toBe(true);
+      expect(level6Card.querySelector('.level-step-counter')?.textContent).toBe('Level 6 of 10');
+    });
   });
 
   describe('3. Words Due Soap Bubble Badge & Sleep Mask Tracking Toggle', () => {
