@@ -67,8 +67,6 @@ function initApp() {
   const loginCatDoor = document.getElementById('login-cat-door');
   const btnMyDucks = document.getElementById('btn-my-ducks');
   const levelSelectGroup = document.getElementById('level-select-group');
-  const btnLevelPrev = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-level-prev'));
-  const btnLevelNext = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-level-next'));
   const levelCarouselDots = document.getElementById('level-carousel-dots');
   const cardLevelBathtub = /** @type {HTMLButtonElement | null} */ (document.getElementById('card-level-bathtub'));
   const cardLevelChest = /** @type {HTMLButtonElement | null} */ (document.getElementById('card-level-chest'));
@@ -353,7 +351,17 @@ function initApp() {
   applyLevelSelection(selectedLevel, false);
 
   if (levelSelectGroup) {
+    let swipeStartX = null;
+    let swipeStartY = null;
+    let suppressClick = false;
+    let suppressTimer = null;
+
     levelSelectGroup.addEventListener('click', (ev) => {
+      if (suppressClick) {
+        ev.stopPropagation();
+        ev.preventDefault();
+        return;
+      }
       const target = /** @type {HTMLElement | null} */ (ev.target);
       const card = target ? target.closest('.level-polaroid-card[data-level]') : null;
       if (card) {
@@ -374,29 +382,66 @@ function initApp() {
       }
     });
 
-    let swipeStartX = null;
-    levelSelectGroup.addEventListener('pointerdown', (ev) => {
+    const onPointerDown = (ev) => {
       swipeStartX = ev.clientX;
-    });
-    levelSelectGroup.addEventListener('pointerup', (ev) => {
+      swipeStartY = ev.clientY;
+    };
+
+    const onPointerUp = (ev) => {
       if (swipeStartX === null) return;
       const dx = ev.clientX - swipeStartX;
+      const dy = swipeStartY !== null ? ev.clientY - swipeStartY : 0;
       swipeStartX = null;
-      if (Math.abs(dx) >= 36) {
+      swipeStartY = null;
+
+      // Minimum swipe threshold: 30px horizontal, dominating any vertical drag
+      if (Math.abs(dx) >= 30 && Math.abs(dx) > Math.abs(dy)) {
+        suppressClick = true;
+        if (suppressTimer) clearTimeout(suppressTimer);
+        suppressTimer = setTimeout(() => {
+          suppressClick = false;
+        }, 350);
         stepCarouselBy(dx < 0 ? 1 : -1);
       }
-    });
-  }
+    };
 
-  if (btnLevelPrev) {
-    btnLevelPrev.addEventListener('click', () => {
-      stepCarouselBy(-1);
-    });
-  }
-  if (btnLevelNext) {
-    btnLevelNext.addEventListener('click', () => {
-      stepCarouselBy(1);
-    });
+    const onPointerCancel = () => {
+      swipeStartX = null;
+      swipeStartY = null;
+    };
+
+    levelSelectGroup.addEventListener('pointerdown', onPointerDown);
+    levelSelectGroup.addEventListener('pointerup', onPointerUp);
+    levelSelectGroup.addEventListener('pointercancel', onPointerCancel);
+
+    // Touch event fallback for older tablet webviews (e.g. Silk Browser)
+    levelSelectGroup.addEventListener('touchstart', (ev) => {
+      if (ev.touches && ev.touches.length > 0) {
+        swipeStartX = ev.touches[0].clientX;
+        swipeStartY = ev.touches[0].clientY;
+      }
+    }, { passive: true });
+
+    levelSelectGroup.addEventListener('touchend', (ev) => {
+      if (swipeStartX === null) return;
+      const touch = ev.changedTouches && ev.changedTouches.length > 0 ? ev.changedTouches[0] : null;
+      if (!touch) return;
+      const dx = touch.clientX - swipeStartX;
+      const dy = swipeStartY !== null ? touch.clientY - swipeStartY : 0;
+      swipeStartX = null;
+      swipeStartY = null;
+
+      if (Math.abs(dx) >= 30 && Math.abs(dx) > Math.abs(dy)) {
+        suppressClick = true;
+        if (suppressTimer) clearTimeout(suppressTimer);
+        suppressTimer = setTimeout(() => {
+          suppressClick = false;
+        }, 350);
+        stepCarouselBy(dx < 0 ? 1 : -1);
+      }
+    }, { passive: true });
+
+    levelSelectGroup.addEventListener('touchcancel', onPointerCancel, { passive: true });
   }
 
   if (btnMode3) {

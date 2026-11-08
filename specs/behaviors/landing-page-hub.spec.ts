@@ -153,11 +153,14 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
       const levelGroup = document.getElementById('level-select-group') as HTMLElement;
       const cardBathtub = document.getElementById('card-level-bathtub') as HTMLButtonElement;
       const cardChest = document.getElementById('card-level-chest') as HTMLButtonElement;
-      const btnNext = document.getElementById('btn-level-next') as HTMLButtonElement;
-      const btnPrev = document.getElementById('btn-level-prev') as HTMLButtonElement;
       const dotsContainer = document.getElementById('level-carousel-dots') as HTMLElement;
 
-      // THEN no bubble aura overlay exists on level cards
+      // THEN paddle arrow buttons are removed from the DOM
+      expect(document.getElementById('btn-level-prev')).toBeNull();
+      expect(document.getElementById('btn-level-next')).toBeNull();
+      expect(document.querySelector('.carousel-paddle-btn')).toBeNull();
+
+      // AND no bubble aura overlay exists on level cards
       expect(levelGroup.querySelector('.level-bubble-aura')).toBeNull();
 
       // AND all redundant labels and status indicators are removed from carousel cards:
@@ -185,8 +188,9 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
       expect(cardChest.classList.contains('pos-right')).toBe(true);
       expect(dotsContainer.querySelectorAll('.level-pebble-dot').length).toBe(2);
 
-      // WHEN clicking the right wooden paddle (▶)
-      btnNext.click();
+      // WHEN swiping left (dx < 0) across the carousel track
+      levelGroup.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 200, clientY: 100 }));
+      levelGroup.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 100, clientY: 100 }));
       await Promise.resolve();
 
       // THEN Chest Opening moves to center stage and Cozy Bathtub peeks on the left
@@ -210,8 +214,9 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
         levelGroup.appendChild(extraCard);
       }
 
-      // Trigger carousel refresh via prev paddle click (back to index 0: Cozy Bathtub)
-      btnPrev.click();
+      // Trigger carousel refresh via swipe right (dx > 0) back to index 0: Cozy Bathtub
+      levelGroup.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 100, clientY: 100 }));
+      levelGroup.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 200, clientY: 100 }));
       await Promise.resolve();
 
       // THEN all 10 pebble step dots render and Cover-Flow assigns center, left/right, far-left/far-right, and hidden positions
@@ -248,6 +253,49 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
       const selectedRules = selectedRuleMatch ? selectedRuleMatch[1] : '';
       expect(selectedRules).not.toContain('#3B6E28');
       expect(selectedRules).not.toContain('#28541D');
+    });
+
+    it('supports swiping left and right to navigate levels and suppresses accidental card clicks during swipe', async () => {
+      // GIVEN an authenticated session on the Play Hub with Cozy Bathtub initially selected
+      setMockAuthUser({ email: 'scher.jonathan@gmail.com', displayName: 'Zoé' });
+      await Promise.resolve();
+
+      const levelGroup = document.getElementById('level-select-group') as HTMLElement;
+      const cardBathtub = document.getElementById('card-level-bathtub') as HTMLButtonElement;
+      const cardChest = document.getElementById('card-level-chest') as HTMLButtonElement;
+
+      expect(cardBathtub.classList.contains('is-selected')).toBe(true);
+      expect(cardChest.classList.contains('is-selected')).toBe(false);
+
+      // WHEN swiping left (pointer moves from clientX 250 to 150: dx = -100)
+      levelGroup.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 250, clientY: 120 }));
+      levelGroup.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 150, clientY: 120 }));
+      await Promise.resolve();
+
+      // THEN Chest Opening is selected and moved to center
+      expect(cardChest.classList.contains('is-selected')).toBe(true);
+      expect(cardChest.classList.contains('pos-center')).toBe(true);
+      expect(cardBathtub.classList.contains('pos-left')).toBe(true);
+
+      // WHEN swiping right (pointer moves from clientX 120 to 220: dx = +100)
+      levelGroup.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 120, clientY: 120 }));
+      levelGroup.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 220, clientY: 120 }));
+      await Promise.resolve();
+
+      // THEN Cozy Bathtub is selected again
+      expect(cardBathtub.classList.contains('is-selected')).toBe(true);
+      expect(cardBathtub.classList.contains('pos-center')).toBe(true);
+
+      // WHEN a swipe gesture finishes over cardBathtub and a click event is triggered
+      levelGroup.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 250, clientY: 120 }));
+      levelGroup.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 150, clientY: 120 }));
+      // Emulate the browser click event generated immediately after pointerup
+      cardBathtub.click();
+      await Promise.resolve();
+
+      // THEN the swipe navigation takes precedence (Chest Opening selected) and click was suppressed
+      expect(cardChest.classList.contains('is-selected')).toBe(true);
+      expect(cardBathtub.classList.contains('is-selected')).toBe(false);
     });
   });
 

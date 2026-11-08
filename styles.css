@@ -2963,6 +2963,9 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 10px;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .level-carousel-main {
@@ -2970,57 +2973,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-}
-
-/* Chunky Wooden Paddle Buttons (◀ / ▶) */
-.carousel-paddle-btn {
-  width: 52px;
-  height: 52px;
-  min-width: 52px;
-  min-height: 52px;
-  border-radius: 50%;
-  border: 2.5px solid #5C3A21;
-  background:
-    repeating-linear-gradient(180deg,
-      rgba(255, 255, 255, 0.08) 0px,
-      rgba(255, 255, 255, 0.08) 2px,
-      transparent 2px,
-      transparent 8px
-    ),
-    linear-gradient(180deg, #DFBA92 0%, #C7996B 55%, #AE7E4E 100%);
-  color: #3B210E;
-  font-family: var(--font-display);
-  font-size: 1.25rem;
-  font-weight: 800;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  z-index: 12;
-  box-shadow:
-    0 4px 0 #4A2C16,
-    0 6px 14px rgba(60, 35, 15, 0.18),
-    inset 0 2px 0 rgba(255, 244, 230, 0.7);
-  transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.15s ease;
-}
-
-.carousel-paddle-btn:hover:not(:disabled) {
-  transform: translateY(-2px) scale(1.04);
-}
-
-.carousel-paddle-btn:active:not(:disabled) {
-  transform: translateY(3px);
-  box-shadow:
-    0 1px 0 #4A2C16,
-    0 2px 6px rgba(60, 35, 15, 0.16),
-    inset 0 1px 0 rgba(255, 244, 230, 0.65);
-}
-
-.carousel-paddle-btn:disabled {
-  opacity: 0.35;
-  cursor: default;
+  position: relative;
+  touch-action: pan-y;
 }
 
 /* Cover-Flow Stage Track (Supports 2 to 10 Level Cards) */
@@ -3050,6 +3004,9 @@ body {
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
   opacity: 0.72;
   transform: translateX(0) translateY(8px) scale(0.82);
   box-shadow:
@@ -3533,14 +3490,6 @@ body {
   .hub-level-cards.carousel-stage-track {
     height: 190px;
     min-width: 180px;
-  }
-
-  .carousel-paddle-btn {
-    width: 44px;
-    height: 44px;
-    min-width: 44px;
-    min-height: 44px;
-    font-size: 1.05rem;
   }
 
   .level-polaroid-card {
