@@ -17,6 +17,7 @@ import {
   loadWords,
   saveWords,
   getLocalISODate,
+  getActiveProfileId,
   setActiveProfileId
 } from '../../js/srs.js';
 
@@ -180,6 +181,35 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
       expect(startOverlay.classList.contains('is-practice-mode')).toBe(true);
       expect(wordsDueBubble.hidden).toBe(true);
       expect(soundEngine.playSleepMaskToggle).toHaveBeenCalledWith(true);
+    });
+
+    it('launches the game with test profile when "Just for Fun" is selected and restores learner profile when toggled off', async () => {
+      // GIVEN an authenticated session with active profile set to 'daughter'
+      setMockAuthUser({ email: 'scher.jonathan@gmail.com', displayName: 'Zoé' });
+      await Promise.resolve();
+      setActiveProfileId('daughter');
+      expect(getActiveProfileId()).toBe('daughter');
+
+      const btnTrackingToggle = document.getElementById('btn-tracking-toggle') as HTMLButtonElement;
+      const btnPlay = document.getElementById('btn-play') as HTMLButtonElement;
+
+      // WHEN "Just for Fun" is selected
+      btnTrackingToggle.click();
+      await Promise.resolve();
+
+      // AND the game is launched
+      btnPlay.click();
+      await vi.advanceTimersByTimeAsync(500);
+
+      // THEN the game launches with the test profile
+      expect(getActiveProfileId()).toBe('test');
+
+      // WHEN "Just for Fun" is toggled off (Counting: ON)
+      btnTrackingToggle.click();
+      await Promise.resolve();
+
+      // THEN the learner profile is restored
+      expect(getActiveProfileId()).toBe('daughter');
     });
   });
 

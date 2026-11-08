@@ -279,7 +279,10 @@ function initApp() {
     }
   }
 
+  let profileBeforePractice = null;
+
   function applyTrackingMode(practiceModeOn, playAudio = false) {
+    const wasPracticeMode = isPracticeMode;
     isPracticeMode = Boolean(practiceModeOn);
     const today = getLocalISODate();
     try {
@@ -305,6 +308,23 @@ function initApp() {
     }
     if (wordsDueBubble) {
       wordsDueBubble.hidden = isPracticeMode;
+    }
+
+    if (isPracticeMode) {
+      const currentActive = getActiveProfileId();
+      if (currentActive !== 'test') {
+        profileBeforePractice = currentActive;
+      }
+      switchActiveProfile('test', playAudio);
+    } else if (wasPracticeMode) {
+      const learner = getSessionLearnerProfile();
+      const targetProfile =
+        profileBeforePractice && profileBeforePractice !== 'test'
+          ? profileBeforePractice
+          : learner
+          ? learner.id
+          : 'daughter';
+      switchActiveProfile(targetProfile, playAudio);
     }
 
     if (playAudio) {
@@ -659,7 +679,7 @@ function initApp() {
     }
   }
 
-  function switchActiveProfile(profileId) {
+  function switchActiveProfile(profileId, showToastNotification = true) {
     setActiveProfileId(profileId);
     const prof = getActiveProfile();
     refreshProfileUI();
@@ -667,7 +687,9 @@ function initApp() {
     if (parentModal && !parentModal.hidden) {
       renderParentWordsTable();
     }
-    showToast(`Active profile: ${prof.name} ${prof.avatar}`);
+    if (showToastNotification) {
+      showToast(`Active profile: ${prof.name} ${prof.avatar}`);
+    }
   }
 
   if (hudProfilePill) {
@@ -1073,7 +1095,10 @@ function initApp() {
     // 3. 400ms bubble pop animation
     await new Promise((resolve) => setTimeout(resolve, START_POP_DELAY_MS));
 
-    // 4. Build session word list
+    // 4. Build session word list (ensure test profile if Just for Fun is selected)
+    if (isPracticeMode && getActiveProfileId() !== 'test') {
+      switchActiveProfile('test', false);
+    }
     const allWords = loadWords();
     let sessionWords = useQuickMode
       ? buildSessionWords(allWords, 3, 3, { ...options, quickSplash: true })
