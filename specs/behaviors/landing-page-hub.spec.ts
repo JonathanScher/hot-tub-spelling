@@ -153,12 +153,16 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
       const levelGroup = document.getElementById('level-select-group') as HTMLElement;
       const cardBathtub = document.getElementById('card-level-bathtub') as HTMLButtonElement;
       const cardChest = document.getElementById('card-level-chest') as HTMLButtonElement;
-      const dotsContainer = document.getElementById('level-carousel-dots') as HTMLElement;
 
       // THEN paddle arrow buttons are removed from the DOM
       expect(document.getElementById('btn-level-prev')).toBeNull();
       expect(document.getElementById('btn-level-next')).toBeNull();
       expect(document.querySelector('.carousel-paddle-btn')).toBeNull();
+
+      // AND dot progression and navigation below the cards are removed from the DOM
+      expect(document.getElementById('level-carousel-dots')).toBeNull();
+      expect(document.querySelector('.level-pebble-dot')).toBeNull();
+      expect(document.querySelector('.level-carousel-dots')).toBeNull();
 
       // AND no bubble aura overlay exists on level cards
       expect(levelGroup.querySelector('.level-bubble-aura')).toBeNull();
@@ -186,7 +190,6 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
 
       expect(cardBathtub.classList.contains('pos-center')).toBe(true);
       expect(cardChest.classList.contains('pos-right')).toBe(true);
-      expect(dotsContainer.querySelectorAll('.level-pebble-dot').length).toBe(2);
 
       // WHEN swiping left (dx < 0) across the carousel track
       levelGroup.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 200, clientY: 100 }));
@@ -219,9 +222,7 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
       levelGroup.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 200, clientY: 100 }));
       await Promise.resolve();
 
-      // THEN all 10 pebble step dots render and Cover-Flow assigns center, left/right, far-left/far-right, and hidden positions
-      const dots = dotsContainer.querySelectorAll('.level-pebble-dot');
-      expect(dots.length).toBe(10);
+      // THEN Cover-Flow assigns center, left/right, far-left/far-right, and hidden positions without dot navigation
       expect(cardBathtub.classList.contains('pos-center')).toBe(true);
       expect(cardChest.classList.contains('pos-right')).toBe(true);
       const level3Card = levelGroup.querySelector('[data-level="level-3"]') as HTMLElement;
@@ -233,8 +234,11 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
       expect(level9Card.classList.contains('pos-far-left')).toBe(true);
       expect(level10Card.classList.contains('pos-left')).toBe(true);
 
-      // WHEN clicking the 6th pebble dot directly
-      (dots[5] as HTMLButtonElement).click();
+      // Advance timers to clear swipe suppressClick timeout
+      vi.advanceTimersByTime(400);
+
+      // WHEN clicking the 6th level card directly
+      level6Card.click();
       await Promise.resolve();
 
       // THEN Level 6 moves to center stage and is selected without redundant labels

@@ -67,7 +67,6 @@ function initApp() {
   const loginCatDoor = document.getElementById('login-cat-door');
   const btnMyDucks = document.getElementById('btn-my-ducks');
   const levelSelectGroup = document.getElementById('level-select-group');
-  const levelCarouselDots = document.getElementById('level-carousel-dots');
   const cardLevelBathtub = /** @type {HTMLButtonElement | null} */ (document.getElementById('card-level-bathtub'));
   const cardLevelChest = /** @type {HTMLButtonElement | null} */ (document.getElementById('card-level-chest'));
   const btnMode3 = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-mode-3'));
@@ -222,37 +221,6 @@ function initApp() {
     return 'pos-hidden';
   }
 
-  function renderLevelCarouselDots(cards, activeIdx) {
-    if (!levelCarouselDots) return;
-    levelCarouselDots.innerHTML = '';
-    const total = cards.length;
-    if (total <= 1) {
-      levelCarouselDots.hidden = true;
-      return;
-    }
-    levelCarouselDots.hidden = false;
-
-    cards.forEach((card, idx) => {
-      const levelId = card.getAttribute('data-level') || '';
-      const labelEl = card.querySelector('.level-card-label');
-      const levelTitle = card.getAttribute('aria-label') || (labelEl && labelEl.textContent) || `Level ${idx + 1}`;
-      const isSelected = idx === activeIdx;
-
-      const dot = document.createElement('button');
-      dot.type = 'button';
-      dot.className = `level-pebble-dot${isSelected ? ' is-active' : ''}`;
-      dot.setAttribute('data-level', levelId);
-      dot.setAttribute('data-level-index', String(idx));
-      dot.setAttribute('aria-label', `Select level ${idx + 1} of ${total}: ${levelTitle}`);
-      dot.setAttribute('aria-current', isSelected ? 'true' : 'false');
-      dot.title = `${levelTitle} (${idx + 1}/${total})`;
-      dot.addEventListener('click', () => {
-        applyLevelSelection(levelId, true);
-      });
-      levelCarouselDots.appendChild(dot);
-    });
-  }
-
   function loadInitialLevel() {
     const cards = getLevelCards();
     const validIds = cards.map((c) => c.getAttribute('data-level')).filter(Boolean);
@@ -292,8 +260,6 @@ function initApp() {
       card.classList.add(posClass);
       card.setAttribute('data-carousel-pos', posClass);
     });
-
-    renderLevelCarouselDots(cards, activeIdx);
 
     if (appShell) {
       appShell.setAttribute('data-selected-level', selectedLevel);
