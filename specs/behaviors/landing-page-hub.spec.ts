@@ -18,7 +18,8 @@ import {
   saveWords,
   getLocalISODate,
   getActiveProfileId,
-  setActiveProfileId
+  setActiveProfileId,
+  awardCosmeticStars
 } from '../../js/srs.js';
 
 const rawHtml = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf8');
@@ -364,5 +365,108 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
       expect(window.__gameInstance.running).toBe(true);
     });
   });
+
+  describe('6. Landing Page Statistics (Shows Kid Statistics, Never Test Profile Statistics)', () => {
+    it('always displays the kid’s words due and stars on the landing page even if test profile is active', async () => {
+      // GIVEN authenticated session for Zoé (kid profile = daughter)
+      setMockAuthUser({ email: 'scher.jonathan@gmail.com', displayName: 'Zoé' });
+      await Promise.resolve();
+
+      // Configure kid (daughter) to have 0 words due today (all done -> gold star) and 7 cosmetic stars
+      const futureDate = '2099-12-31';
+      const daughterWords = loadWords(undefined, undefined, 'daughter').map((w) => ({
+        ...w,
+        next_review: futureDate,
+        box: 4
+      }));
+      saveWords(daughterWords, undefined, 'daughter');
+      awardCosmeticStars(7, 'daughter');
+
+      // Configure test profile to have 16 words due today (due now) and 0 stars
+      const today = getLocalISODate();
+      const testWords = loadWords(undefined, undefined, 'test').map((w) => ({
+        ...w,
+        next_review: today,
+        box: 1
+      }));
+      saveWords(testWords, undefined, 'test');
+
+      // WHEN switching active profile to 'test'
+      const testBtn = document.querySelector('button[data-profile-id="test"]') as HTMLButtonElement;
+      if (testBtn) {
+        testBtn.click();
+      } else {
+        setActiveProfileId('test');
+      }
+      await Promise.resolve();
+
+      expect(getActiveProfileId()).toBe('test');
+
+      const wordsDueBubble = document.getElementById('words-due-bubble') as HTMLElement;
+      const wordsDueCount = document.getElementById('words-due-count') as HTMLElement;
+      const wordsDueSub = document.getElementById('words-due-sub') as HTMLElement;
+      const hudStarsCount = document.getElementById('hud-stars-count') as HTMLElement;
+      const btnQuickSplashText = document.getElementById('btn-quick-splash-text') as HTMLElement;
+
+      // THEN the landing page statistics show the kid's statistics (⭐ all done, 7 stars), NEVER the test profile's (16 due, 0 stars)
+      expect(wordsDueBubble.classList.contains('is-all-done')).toBe(true);
+      expect(wordsDueCount.textContent).toBe('⭐');
+      expect(wordsDueSub.textContent).toBe('All done! Free play!');
+      expect(hudStarsCount.textContent).toBe('7');
+      expect(btnQuickSplashText.textContent).toContain('0 due ⭐');
+    });
+
+    it('always displays the kid’s statistics in the My Ducks progress shelf even if test profile is active', async () => {
+      // GIVEN authenticated session for Zoé
+      setMockAuthUser({ email: 'scher.jonathan@gmail.com', displayName: 'Zoé' });
+      await Promise.resolve();
+
+      // Configure kid (daughter) stats: 5 stars, 4 blooming words, 2 due words
+      const today = getLocalISODate();
+      const daughterWords = loadWords(undefined, undefined, 'daughter').map((w, idx) => ({
+        ...w,
+        box: idx < 4 ? 4 : 2,
+        next_review: idx < 2 ? today : '2099-12-31'
+      }));
+      saveWords(daughterWords, undefined, 'daughter');
+      awardCosmeticStars(5, 'daughter');
+
+      // Configure test profile stats: 0 stars, 0 blooming words, 16 due words
+      const testWords = loadWords(undefined, undefined, 'test').map((w) => ({
+        ...w,
+        box: 1,
+        next_review: today
+      }));
+      saveWords(testWords, undefined, 'test');
+
+      // Switch active profile to test
+      const testBtn = document.querySelector('button[data-profile-id="test"]') as HTMLButtonElement;
+      if (testBtn) {
+        testBtn.click();
+      } else {
+        setActiveProfileId('test');
+      }
+      await Promise.resolve();
+      expect(getActiveProfileId()).toBe('test');
+
+      // WHEN opening the My Ducks progress shelf from the landing page
+      const btnMyDucks = document.getElementById('btn-my-ducks') as HTMLAnchorElement;
+      btnMyDucks.click();
+      await Promise.resolve();
+
+      const ducksStarsTotal = document.getElementById('ducks-stars-total') as HTMLElement;
+      const ducksBloomingTotal = document.getElementById('ducks-blooming-total') as HTMLElement;
+      const ducksDueTotal = document.getElementById('ducks-due-total') as HTMLElement;
+      const ducksLearnerSubtitle = document.getElementById('ducks-learner-subtitle') as HTMLElement;
+
+      // THEN My Ducks shows the kid’s statistics (5 stars, 4 blooming, 2 due, Zoé's collection), NEVER the test profile's (0 stars, 0 blooming, 16 due, Test / Sandbox's collection)
+      expect(ducksStarsTotal.textContent).toBe('5');
+      expect(ducksBloomingTotal.textContent).toBe('4');
+      expect(ducksDueTotal.textContent).toBe('2');
+      expect(ducksLearnerSubtitle.textContent).toContain("Zoé");
+      expect(ducksLearnerSubtitle.textContent).not.toContain("Test");
+    });
+  });
 });
+
 

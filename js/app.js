@@ -608,6 +608,14 @@ function initApp() {
     return getProfileForEmail('scher.jonathan@gmail.com');
   }
 
+  function getKidLearnerProfile() {
+    const learner = getSessionLearnerProfile();
+    if (learner && !learner.isTest) {
+      return learner;
+    }
+    return getProfileForEmail('scher.jonathan@gmail.com');
+  }
+
   function refreshProfileUI() {
     const activeId = getActiveProfileId();
     const profiles = getProfiles();
@@ -860,19 +868,19 @@ function initApp() {
 
   // --- Top-Right Progress Link ("My Ducks" -> /progress) ---
   function renderDucksProgressShelf() {
-    const words = loadWords();
+    const kidProf = getKidLearnerProfile();
+    const words = loadWords(undefined, undefined, kidProf.id);
     const activeWords = words.filter((w) => w.active !== false);
     const today = getLocalISODate();
     const dueCount = activeWords.filter((w) => !w.next_review || w.next_review <= today).length;
     const bloomingCount = activeWords.filter((w) => w.box >= 4).length;
-    const activeProf = getActiveProfile();
-    const totalStars = getCosmeticStars(activeProf.id);
+    const totalStars = getCosmeticStars(kidProf.id);
 
     if (ducksStarsTotal) ducksStarsTotal.textContent = String(totalStars);
     if (ducksBloomingTotal) ducksBloomingTotal.textContent = String(bloomingCount);
     if (ducksDueTotal) ducksDueTotal.textContent = String(dueCount);
     if (ducksLearnerSubtitle) {
-      ducksLearnerSubtitle.textContent = `${activeProf.name}'s duck & word collection (${activeWords.length} words)`;
+      ducksLearnerSubtitle.textContent = `${kidProf.name}'s duck & word collection (${activeWords.length} words)`;
     }
 
     if (ducksWordShelf) {
@@ -945,7 +953,8 @@ function initApp() {
   }
 
   function refreshWelcomeMetadata() {
-    const words = loadWords();
+    const kidProf = getKidLearnerProfile();
+    const words = loadWords(undefined, undefined, kidProf.id);
     const activeWords = words.filter((w) => w.active !== false);
     const currentWeek = resolveActiveWeekDisplay(activeWords);
     const today = getLocalISODate();
@@ -1001,8 +1010,7 @@ function initApp() {
       startSyncNote.textContent = `${activeWords.length} words (${dueCount} due today) • ${syncText}`;
     }
 
-    const activeProf = getActiveProfile();
-    const totalStars = getCosmeticStars(activeProf.id);
+    const totalStars = getCosmeticStars(kidProf.id);
 
     if (btnQuickSplashText) {
       if (dueCount === 0) {
