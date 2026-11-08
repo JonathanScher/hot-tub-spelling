@@ -67,6 +67,12 @@ class SpeechCascadeEngine {
     }
   }
 
+  stopSpeaking() {
+    this.activeToken++;
+    this._stopActiveAudio();
+    this._notifySpeaking(false);
+  }
+
   /**
    * Unlocks both HTML5 <audio> and Web Speech API during the user's "Play" button tap.
    */

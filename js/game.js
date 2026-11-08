@@ -253,6 +253,31 @@ export class HotTubGame {
     if (this.flyingLayer) {
       this.flyingLayer.innerHTML = '';
     }
+    if (this.slotsContainer) {
+      this.slotsContainer.classList.remove('word-celebrating');
+    }
+  }
+
+  /**
+   * Abandons the active session without recording failed SRS attempts,
+   * clearing bubbles, resetting slots and speech, and stopping the game loop.
+   */
+  abandonSession() {
+    this.stop();
+    if (this.slotsContainer) {
+      this.slotsContainer.innerHTML = '';
+    }
+    if (this.retryBadge) {
+      this.retryBadge.hidden = true;
+    }
+    this.currentWordObj = null;
+    this.targetChars = [];
+    this.queue = [];
+    this.sessionResults = [];
+    this.sessionSummary = null;
+    if (speechEngine && typeof speechEngine.stopSpeaking === 'function') {
+      speechEngine.stopSpeaking();
+    }
   }
 
   /**

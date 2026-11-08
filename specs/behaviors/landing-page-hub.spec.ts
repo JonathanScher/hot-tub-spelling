@@ -38,6 +38,7 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
     vi.spyOn(soundEngine, 'playSleepMaskToggle').mockImplementation(() => {});
     vi.spyOn(soundEngine, 'playStartHarpGlissando').mockImplementation(() => {});
     vi.spyOn(soundEngine, 'playCatWakeMeow').mockImplementation(() => {});
+    vi.spyOn(soundEngine, 'playUiTap').mockImplementation(() => {});
 
     document.documentElement.innerHTML = sanitizedHtml;
     await import('../../js/app.js');
@@ -293,4 +294,75 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
       expect(window.__gameInstance.running).toBe(true);
     });
   });
+
+  describe('5. In-Game Abandon Game Button (Top Right)', () => {
+    it('renders an abandon game button top right in the HUD topbar', () => {
+      const topbarActions = document.querySelector('.hud-topbar .topbar-actions') as HTMLElement;
+      expect(topbarActions).not.toBeNull();
+
+      const btnAbandon = document.getElementById('btn-abandon-game') as HTMLButtonElement;
+      expect(btnAbandon).not.toBeNull();
+      expect(topbarActions.contains(btnAbandon)).toBe(true);
+      expect(btnAbandon.getAttribute('aria-label')).toMatch(/abandon/i);
+    });
+
+    it('abandons the active game session and returns to the landing page when clicked', async () => {
+      // GIVEN an active running game session launched from the Play Hub
+      setMockAuthUser({ email: 'scher.jonathan@gmail.com', displayName: 'Zoé' });
+      await Promise.resolve();
+
+      const startOverlay = document.getElementById('start-overlay') as HTMLElement;
+      const btnPlay = document.getElementById('btn-play') as HTMLButtonElement;
+      const btnAbandon = document.getElementById('btn-abandon-game') as HTMLButtonElement;
+      const bubbleStage = document.getElementById('bubble-stage') as HTMLElement;
+
+      btnPlay.click();
+      await vi.advanceTimersByTimeAsync(500);
+
+      expect(startOverlay.hidden).toBe(true);
+      // @ts-ignore
+      expect(window.__gameInstance.running).toBe(true);
+
+      // WHEN the child clicks the abandon button in top right
+      btnAbandon.click();
+      await Promise.resolve();
+
+      // THEN the game session stops running and stage bubbles are cleared
+      // @ts-ignore
+      expect(window.__gameInstance.running).toBe(false);
+      expect(bubbleStage.querySelectorAll('.soap-bubble').length).toBe(0);
+
+      // AND the landing page (Play Hub) is restored and active
+      expect(startOverlay.hidden).toBe(false);
+      expect(startOverlay.classList.contains('is-active')).toBe(true);
+      expect(soundEngine.playUiTap).toHaveBeenCalled();
+    });
+
+    it('allows starting a new game session after abandoning a previous game', async () => {
+      // GIVEN a game session that was abandoned
+      setMockAuthUser({ email: 'scher.jonathan@gmail.com', displayName: 'Zoé' });
+      await Promise.resolve();
+
+      const startOverlay = document.getElementById('start-overlay') as HTMLElement;
+      const btnPlay = document.getElementById('btn-play') as HTMLButtonElement;
+      const btnAbandon = document.getElementById('btn-abandon-game') as HTMLButtonElement;
+
+      btnPlay.click();
+      await vi.advanceTimersByTimeAsync(500);
+      btnAbandon.click();
+      await Promise.resolve();
+
+      expect(startOverlay.hidden).toBe(false);
+
+      // WHEN pressing play again from the landing page
+      btnPlay.click();
+      await vi.advanceTimersByTimeAsync(500);
+
+      // THEN a new session is running and landing page is hidden again
+      expect(startOverlay.hidden).toBe(true);
+      // @ts-ignore
+      expect(window.__gameInstance.running).toBe(true);
+    });
+  });
 });
+

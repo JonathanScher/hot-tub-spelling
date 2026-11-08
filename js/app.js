@@ -134,6 +134,9 @@ function initApp() {
   const btnHint = document.getElementById('btn-hint');
 
   const btnParentLock = document.getElementById('btn-parent-lock');
+  const btnAbandonGame = /** @type {HTMLButtonElement | null} */ (
+    document.getElementById('btn-abandon-game') || document.getElementById('btn-abandon')
+  );
   const lockHoldRing = document.getElementById('lock-hold-ring');
 
   const mathGateModal = document.getElementById('math-gate-modal');
@@ -1175,15 +1178,62 @@ function initApp() {
     game.startSession(sessionWords, allWords);
   }
 
-  // 7. Gameplay HUD Buttons ("Listen Again" & "Hint")
-  btnListen.addEventListener('click', () => {
-    soundEngine.playUiTap();
-    game.replayCurrentWord();
-  });
+  // 7. Gameplay HUD Buttons ("Listen Again", "Hint" & "Abandon Game")
+  if (btnListen) {
+    btnListen.addEventListener('click', () => {
+      soundEngine.playUiTap();
+      game.replayCurrentWord();
+    });
+  }
 
-  btnHint.addEventListener('click', () => {
-    game.useHintButton();
-  });
+  if (btnHint) {
+    btnHint.addEventListener('click', () => {
+      game.useHintButton();
+    });
+  }
+
+  function abandonGame() {
+    soundEngine.unlockAudio().then(() => {
+      soundEngine.playUiTap();
+    }).catch(() => {});
+
+    if (speechEngine && typeof speechEngine.stopSpeaking === 'function') {
+      speechEngine.stopSpeaking();
+    }
+
+    if (game) {
+      if (typeof game.abandonSession === 'function') {
+        game.abandonSession();
+      } else {
+        game.stop();
+      }
+    }
+
+    if (completeOverlay) {
+      completeOverlay.hidden = true;
+      completeOverlay.classList.remove('is-active');
+    }
+
+    if (startOverlay) {
+      startOverlay.hidden = false;
+      startOverlay.classList.add('is-active');
+    }
+
+    refreshWelcomeMetadata();
+    refreshProfileUI();
+  }
+
+  if (btnAbandonGame) {
+    btnAbandonGame.addEventListener('click', () => {
+      abandonGame();
+    });
+  }
+
+  // @ts-ignore
+  if (typeof window !== 'undefined') {
+    // @ts-ignore
+    window.__abandonGame = abandonGame;
+  }
 
   // 8. Session Completion Screen
   function renderCompletionScreen(summary) {
