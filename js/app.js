@@ -51,7 +51,6 @@ function initApp() {
   // DOM References
   const appShell = document.getElementById('app-shell');
   const startOverlay = document.getElementById('start-overlay');
-  const startWeekPill = document.getElementById('start-week-pill');
   const startSyncNote = document.getElementById('start-sync-note');
   const btnPlay = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-play'));
   const btnPlayText = document.getElementById('btn-play-text');
@@ -66,10 +65,6 @@ function initApp() {
   // New Play Hub & Login Gate DOM References
   const playHubView = document.getElementById('play-hub-view');
   const loginCatDoor = document.getElementById('login-cat-door');
-  const hubWeekDropdownWrap = document.getElementById('hub-week-dropdown-wrap');
-  const btnWeekSelector = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-week-selector'));
-  const weekSelectorPopover = document.getElementById('week-selector-popover');
-  const weekTilesGrid = document.getElementById('week-tiles-grid');
   const btnMyDucks = document.getElementById('btn-my-ducks');
   const levelSelectGroup = document.getElementById('level-select-group');
   const btnLevelPrev = /** @type {HTMLButtonElement | null} */ (document.getElementById('btn-level-prev'));
@@ -159,6 +154,10 @@ function initApp() {
   const parentAuthSignedOut = document.getElementById('parent-auth-signed-out');
   const btnParentSignin = document.getElementById('btn-parent-signin');
   const allowedEmailsChips = document.getElementById('allowed-emails-chips');
+
+  const parentActiveWeekBadge = document.getElementById('parent-active-week-badge');
+  const parentWeekSelect = /** @type {HTMLSelectElement | null} */ (document.getElementById('parent-week-select'));
+  const parentWeekChips = document.getElementById('parent-week-chips');
 
   const inputWeekLabel = /** @type {HTMLInputElement | null} */ (document.getElementById('input-week-label'));
   const inputWeeklyWords = /** @type {HTMLTextAreaElement | null} */ (document.getElementById('input-weekly-words'));
@@ -739,6 +738,7 @@ function initApp() {
     refreshProfileUI();
     refreshWelcomeMetadata();
     if (parentModal && !parentModal.hidden) {
+      renderParentWeekSelector();
       renderParentWordsTable();
     }
     if (showToastNotification) {
@@ -796,6 +796,7 @@ function initApp() {
         }
         refreshProfileUI();
         if (parentModal && !parentModal.hidden) {
+          renderParentWeekSelector();
           renderParentWordsTable();
         }
         showToast(`${learner.name}'s progress has been reset to Box 1.`);
@@ -815,6 +816,7 @@ function initApp() {
         }
         refreshProfileUI();
         if (parentModal && !parentModal.hidden) {
+          renderParentWeekSelector();
           renderParentWordsTable();
         }
         showToast('Test profile progress reset to Box 1.');
@@ -834,7 +836,7 @@ function initApp() {
     });
   }
 
-  // --- Top-Left Active Week Selector Popover & Numbered Wooden Tiles ---
+  // --- Parent Dashboard Active Week Selection ---
   function resolveActiveWeekDisplay(activeWords) {
     try {
       const explicitStored = window.localStorage.getItem(CURRENT_WEEK_KEY);
@@ -847,67 +849,101 @@ function initApp() {
     return getCurrentWeekLabel(activeWords);
   }
 
-  function renderWeekTilesGrid(currentWeekLabel, activeWords) {
-    if (!weekTilesGrid) return;
-    weekTilesGrid.innerHTML = '';
+  function applyActiveWeek(weekLabel) {
+    const clean = String(weekLabel || '').trim();
+    if (!clean) return;
+    setCurrentWeekLabel(clean);
+    soundEngine.unlockAudio().then(() => soundEngine.playUiTap());
+    renderParentWeekSelector();
+    renderParentWordsTable();
+    refreshWelcomeMetadata();
+    showToast(`Active week set to ${clean}`);
+  }
+
+  let isUpdatingWeekSelect = false;
+
+  function renderParentWeekSelector() {
+    const words = loadWords();
+    const activeWords = words.filter((w) => w.active !== false);
+    const currentWeek = resolveActiveWeekDisplay(activeWords);
+
+    if (parentActiveWeekBadge) {
+      parentActiveWeekBadge.textContent = `Active: ${currentWeek}`;
+    }
 
     let maxWeekNum = 8;
+    const customWeeks = new Set();
     for (const w of activeWords) {
-      const m = /^week\s*(\d+)$/i.exec(String(w.week_label || '').trim());
+      const lbl = String(w.week_label || '').trim();
+      if (!lbl) continue;
+      const m = /^week\s*(\d+)$/i.exec(lbl);
       if (m) {
         const n = parseInt(m[1], 10);
         if (n > maxWeekNum) maxWeekNum = n;
+      } else {
+        customWeeks.add(lbl);
       }
     }
-    const currMatch = /^week\s*(\d+)$/i.exec(String(currentWeekLabel || '').trim());
-    const currWeekNum = currMatch ? parseInt(currMatch[1], 10) : -1;
-    if (currWeekNum > maxWeekNum) maxWeekNum = currWeekNum;
+    const currMatch = /^week\s*(\d+)$/i.exec(String(currentWeek).trim());
+    if (currMatch) {
+      const n = parseInt(currMatch[1], 10);
+      if (n > maxWeekNum) maxWeekNum = n;
+    } else if (currentWeek && String(currentWeek).trim()) {
+      customWeeks.add(String(currentWeek).trim());
+    }
 
+    const allWeeks = [];
     for (let num = 1; num <= maxWeekNum; num++) {
-      const label = `Week ${num}`;
-      const isSelected = currWeekNum === num || String(currentWeekLabel).trim().toLowerCase() === label.toLowerCase();
-      const tile = document.createElement('button');
-      tile.type = 'button';
-      tile.className = `week-wood-tile${isSelected ? ' is-active' : ''}`;
-      tile.setAttribute('data-week-label', label);
-      tile.setAttribute('role', 'menuitemradio');
-      tile.setAttribute('aria-checked', isSelected ? 'true' : 'false');
-      tile.textContent = String(num);
-      tile.addEventListener('click', () => {
-        setCurrentWeekLabel(label);
-        soundEngine.unlockAudio().then(() => soundEngine.playUiTap());
-        closeWeekPopover();
-        refreshWelcomeMetadata();
-      });
-      weekTilesGrid.appendChild(tile);
+      allWeeks.push(`Week ${num}`);
+    }
+    for (const cw of customWeeks) {
+      if (!allWeeks.includes(cw)) {
+        allWeeks.push(cw);
+      }
+    }
+
+    if (parentWeekSelect) {
+      isUpdatingWeekSelect = true;
+      parentWeekSelect.innerHTML = '';
+      for (const week of allWeeks) {
+        const opt = document.createElement('option');
+        opt.value = week;
+        opt.textContent = week;
+        if (week.toLowerCase() === currentWeek.toLowerCase()) {
+          opt.selected = true;
+        }
+        parentWeekSelect.appendChild(opt);
+      }
+      parentWeekSelect.value = currentWeek;
+      isUpdatingWeekSelect = false;
+    }
+
+    if (parentWeekChips) {
+      parentWeekChips.innerHTML = '';
+      for (const week of allWeeks) {
+        const isSelected = week.toLowerCase() === currentWeek.toLowerCase();
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = `parent-week-chip${isSelected ? ' is-active' : ''}`;
+        chip.setAttribute('data-week-label', week);
+        chip.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+        chip.textContent = week;
+        chip.addEventListener('click', () => {
+          applyActiveWeek(week);
+        });
+        parentWeekChips.appendChild(chip);
+      }
     }
   }
 
-  function closeWeekPopover() {
-    if (weekSelectorPopover) weekSelectorPopover.hidden = true;
-    if (btnWeekSelector) btnWeekSelector.setAttribute('aria-expanded', 'false');
-  }
-
-  if (btnWeekSelector && weekSelectorPopover) {
-    btnWeekSelector.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      const willOpen = weekSelectorPopover.hidden;
-      weekSelectorPopover.hidden = !willOpen;
-      btnWeekSelector.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
-      soundEngine.unlockAudio().then(() => soundEngine.playUiTap());
+  if (parentWeekSelect) {
+    parentWeekSelect.addEventListener('change', () => {
+      if (isUpdatingWeekSelect) return;
+      if (parentWeekSelect.value) {
+        applyActiveWeek(parentWeekSelect.value);
+      }
     });
   }
-
-  document.addEventListener('click', (ev) => {
-    if (
-      weekSelectorPopover &&
-      !weekSelectorPopover.hidden &&
-      hubWeekDropdownWrap &&
-      !hubWeekDropdownWrap.contains(/** @type {Node} */ (ev.target))
-    ) {
-      closeWeekPopover();
-    }
-  });
 
   // --- Top-Right Progress Link ("My Ducks" -> /progress) ---
   function renderDucksProgressShelf() {
@@ -999,15 +1035,8 @@ function initApp() {
     const kidProf = getKidLearnerProfile();
     const words = loadWords(undefined, undefined, kidProf.id);
     const activeWords = words.filter((w) => w.active !== false);
-    const currentWeek = resolveActiveWeekDisplay(activeWords);
     const today = getLocalISODate();
     const dueCount = activeWords.filter((w) => !w.next_review || w.next_review <= today).length;
-
-    if (startWeekPill) {
-      startWeekPill.textContent = currentWeek;
-    }
-
-    renderWeekTilesGrid(currentWeek, activeWords);
 
     // Smart Default for Mode Toggle:
     // Defaults to 3 Words if the child has >5 words due (reduces friction to start), or remembers their last choice.
@@ -1087,6 +1116,7 @@ function initApp() {
   checkAndApplyZoeReset();
   refreshProfileUI();
   refreshWelcomeMetadata();
+  renderParentWeekSelector();
 
   if (typeof window !== 'undefined' && window.location && window.location.pathname === '/progress') {
     if (authManager.isAuthenticated()) {
@@ -1457,6 +1487,7 @@ function initApp() {
           : 'Offline (Cached)'
         : 'Sign-In Required'
     });
+    renderParentWeekSelector();
     updateWeeklyCountBadge();
     renderParentWordsTable();
     parentModal.hidden = false;
@@ -1495,6 +1526,7 @@ function initApp() {
       btnSyncNow.disabled = false;
       btnSyncNow.textContent = 'Sync Now';
 
+      renderParentWeekSelector();
       renderParentWordsTable();
       refreshWelcomeMetadata();
 
@@ -1564,6 +1596,7 @@ function initApp() {
     inputWeeklyWords.value = '';
     inputWeekLabel.value = suggestNextWeekLabel();
     updateWeeklyCountBadge();
+    renderParentWeekSelector();
     renderParentWordsTable();
     refreshWelcomeMetadata();
 

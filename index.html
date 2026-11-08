@@ -297,27 +297,8 @@
       <div id="play-hub-view" class="play-hub-view">
         <!-- Row 1: Top Utility Bar (Quiet Corner Utilities + Hand-Drawn Title) -->
         <div class="hub-topbar">
-          <!-- Top-Left: Active Week Selector -->
-          <div class="hub-week-dropdown-wrap" id="hub-week-dropdown-wrap">
-            <button
-              type="button"
-              id="btn-week-selector"
-              class="hub-wood-pill hub-week-btn"
-              aria-haspopup="true"
-              aria-expanded="false"
-              aria-label="Select active week"
-            >
-              <span class="hub-pill-icon" aria-hidden="true">📅</span>
-              <span id="start-week-pill" class="hub-week-text">Week 8</span>
-              <span class="hub-week-caret" aria-hidden="true">▾</span>
-            </button>
-
-            <!-- Numbered Wooden Tiles Grid Popover -->
-            <div id="week-selector-popover" class="week-selector-popover" role="menu" aria-label="Choose active week" hidden>
-              <div class="week-popover-header">Choose Week</div>
-              <div id="week-tiles-grid" class="week-tiles-grid"></div>
-            </div>
-          </div>
+          <!-- Top-Left: Spacer for layout balance -->
+          <div class="hub-topbar-spacer" aria-hidden="true"></div>
 
           <!-- Centerpiece Title: Hand-Drawn "Hot Tub ♡" -->
           <h1 id="start-title" class="hub-brand-title">
@@ -721,10 +702,30 @@
             </div>
           </section>
 
-          <!-- Section 2: Quick Weekly Word List Editor (6-10 Words) -->
-          <section class="parent-card">
+          <!-- Section 2: Active Practice Week & Weekly Word List Editor -->
+          <section class="parent-card" id="parent-card-weekly">
             <div class="card-title-row">
-              <h3>2. Add New Weekly Words (6–10 Words)</h3>
+              <h3>2. Active Practice Week &amp; Word Lists</h3>
+              <span id="parent-active-week-badge" class="status-badge is-connected">Active: Week 8</span>
+            </div>
+
+            <!-- Active Week Selector -->
+            <div class="parent-week-selection-box">
+              <label for="parent-week-select" class="parent-field-label">Active Week for Practice</label>
+              <p class="parent-help-text">
+                Select which week’s vocabulary is currently prioritized in daily practice sessions alongside spaced repetition reviews.
+              </p>
+              <div class="parent-week-control-row">
+                <select id="parent-week-select" class="pastel-input parent-week-select" aria-label="Select active week for practice">
+                </select>
+                <div id="parent-week-chips" class="parent-week-chips" role="group" aria-label="Quick week selection"></div>
+              </div>
+            </div>
+
+            <hr class="parent-divider" />
+
+            <div class="card-title-row" style="margin-top: 14px;">
+              <h4 class="parent-sub-heading">Add New Weekly Words (6–10 Words)</h4>
               <span id="weekly-word-count" class="status-badge">0 words</span>
             </div>
             <p class="parent-help-text">

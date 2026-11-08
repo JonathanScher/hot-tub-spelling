@@ -237,32 +237,18 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
     });
   });
 
-  describe('4. Top Utility Bar (Week Selector Grid & My Ducks Progress Shelf) & Double-Tap Protection', () => {
-    it('opens the numbered wooden week tiles grid and updates the active week on selection', async () => {
+  describe('4. Top Utility Bar & My Ducks Progress Shelf & Double-Tap Protection', () => {
+    it('does not display week selection on the main screen play hub', async () => {
       // GIVEN authenticated Play Hub
       setMockAuthUser({ email: 'scher.jonathan@gmail.com', displayName: 'Zoé' });
       await Promise.resolve();
 
-      const btnWeekSelector = document.getElementById('btn-week-selector') as HTMLButtonElement;
-      const weekPopover = document.getElementById('week-selector-popover') as HTMLElement;
-      const startWeekPill = document.getElementById('start-week-pill') as HTMLElement;
-
-      expect(weekPopover.hidden).toBe(true);
-
-      // WHEN clicking the top-left Week pill
-      btnWeekSelector.click();
-
-      // THEN the numbered wooden tiles grid opens
-      expect(weekPopover.hidden).toBe(false);
-      const week4Tile = document.querySelector('.week-wood-tile[data-week-label="Week 4"]') as HTMLButtonElement;
-      expect(week4Tile).not.toBeNull();
-
-      // WHEN clicking tile "4"
-      week4Tile.click();
-
-      // THEN the popover closes and the top-left pill updates to "Week 4"
-      expect(weekPopover.hidden).toBe(true);
-      expect(startWeekPill.textContent).toBe('Week 4');
+      // THEN week selector elements are removed from the main screen
+      expect(document.getElementById('btn-week-selector')).toBeNull();
+      expect(document.getElementById('week-selector-popover')).toBeNull();
+      expect(document.getElementById('start-week-pill')).toBeNull();
+      expect(document.getElementById('hub-week-dropdown-wrap')).toBeNull();
+      expect(document.querySelector('.hub-topbar-spacer')).not.toBeNull();
     });
 
     it('opens the My Ducks progress modal when clicking the top-right My Ducks button', async () => {

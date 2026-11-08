@@ -1944,6 +1944,80 @@ body {
   font-size: 0.94rem;
 }
 
+/* Parent Dashboard Active Week Selection */
+.parent-week-selection-box {
+  background: var(--cream-paper);
+  border: 1.5px solid rgba(196, 154, 113, 0.4);
+  border-radius: 16px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+
+.parent-field-label {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--ink-brown);
+  margin-bottom: 2px;
+}
+
+.parent-week-control-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.parent-week-select {
+  max-width: 260px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.parent-week-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.parent-week-chip {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--wood-mid);
+  background: #FFFDF9;
+  color: var(--ink-brown);
+  font-family: var(--font-display);
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.parent-week-chip:hover {
+  background: #F5E8D3;
+  transform: translateY(-1px);
+}
+
+.parent-week-chip.is-active {
+  background: var(--green-btn-bg);
+  border-color: #28541D;
+  color: #FFFDF8;
+  box-shadow: 0 2px 0 var(--green-btn-bevel);
+}
+
+.parent-divider {
+  border: 0;
+  border-top: 1.5px dashed rgba(196, 154, 113, 0.4);
+  margin: 14px 0;
+}
+
+.parent-sub-heading {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: var(--ink-brown);
+}
+
 /* Weekly Editor Form */
 .weekly-form-grid {
   display: flex;
@@ -2840,8 +2914,7 @@ body {
   gap: 12px;
 }
 
-.hub-week-dropdown-wrap {
-  position: relative;
+.hub-topbar-spacer {
   justify-self: start;
 }
 
@@ -2896,78 +2969,6 @@ body {
 .hub-pill-icon {
   font-size: 1.15rem;
   line-height: 1;
-}
-
-.hub-week-caret {
-  font-size: 0.88rem;
-  opacity: 0.85;
-}
-
-/* Week Selector Numbered Wooden Tiles Grid Popover */
-.week-selector-popover {
-  position: absolute;
-  top: calc(100% + 10px);
-  left: 0;
-  z-index: 40;
-  width: 248px;
-  background: #F9F2E7;
-  border: 3px solid #5C3A21;
-  border-radius: 22px;
-  padding: 14px;
-  box-shadow:
-    0 6px 0 #4A2C16,
-    0 16px 32px rgba(45, 22, 8, 0.26);
-}
-
-.week-popover-header {
-  font-family: var(--font-display);
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: #5C3A21;
-  text-align: center;
-  margin-bottom: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.week-tiles-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-}
-
-.week-wood-tile {
-  min-height: 48px;
-  border-radius: 14px;
-  border: 2px solid #5C3A21;
-  background: linear-gradient(180deg, #EBD3B7 0%, #D2AE86 100%);
-  color: #3B210E;
-  font-family: var(--font-display);
-  font-size: 1.08rem;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: 0 3px 0 #4A2C16, inset 0 1px 0 rgba(255, 255, 255, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.1s ease, background 0.15s ease;
-}
-
-.week-wood-tile:hover {
-  transform: translateY(-1px);
-}
-
-.week-wood-tile:active {
-  transform: translateY(2px);
-  box-shadow: 0 1px 0 #4A2C16;
-}
-
-.week-wood-tile.is-active {
-  background: var(--green-btn-bg);
-  border-color: #28541D;
-  color: #FFFFFF;
-  text-shadow: 0 1px 1px #1F4416;
-  box-shadow: 0 3px 0 var(--green-btn-bevel), 0 0 10px rgba(91, 170, 59, 0.45);
 }
 
 /* Row 2: Center Stage (60% height desktop — Cover-Flow Level Carousel & Mode Toggle) */
@@ -3615,15 +3616,15 @@ body {
   }
 
   .hub-topbar {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     grid-template-areas:
-      "week ducks"
-      "title title";
+      "ducks"
+      "title";
     row-gap: 10px;
   }
 
-  .hub-week-dropdown-wrap {
-    grid-area: week;
+  .hub-topbar-spacer {
+    display: none;
   }
 
   .hub-ducks-btn {

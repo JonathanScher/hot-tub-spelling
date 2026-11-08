@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { clearMemoryStorage } from '../../js/srs.js';
+import { clearMemoryStorage, CURRENT_WEEK_KEY } from '../../js/srs.js';
 
 const rawHtml = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf8');
 // Strip external stylesheet links to prevent happy-dom network warnings
@@ -148,6 +148,81 @@ describe('Application Shell, Navigation & Parent Math Gate (Executable Specifica
 
       // THEN parent modal is hidden
       expect(parentModal.hidden).toBe(true);
+    });
+  });
+
+  describe('4. Active Week Selection in Parent Dashboard', () => {
+    function unlockParentDashboard() {
+      const btnParentLock = document.getElementById('btn-parent-lock') as HTMLElement;
+      const mathQuestionLabel = document.getElementById('math-question-label') as HTMLElement;
+      const formMathGate = document.getElementById('form-math-gate') as HTMLFormElement;
+      const inputMathAnswer = document.getElementById('input-math-answer') as HTMLInputElement;
+
+      btnParentLock.dispatchEvent(new Event('pointerdown'));
+      btnParentLock.dispatchEvent(new Event('pointerup'));
+
+      const text = mathQuestionLabel.textContent || '';
+      const match = text.match(/(\d+)\s*\+\s*(\d+)\s*=\s*\?/);
+      const correctSum = parseInt(match![1], 10) + parseInt(match![2], 10);
+
+      inputMathAnswer.value = String(correctSum);
+      formMathGate.dispatchEvent(new Event('submit'));
+    }
+
+    it('renders the active week badge and quick week selection chips when dashboard opens', () => {
+      // GIVEN parent dashboard is unlocked
+      unlockParentDashboard();
+
+      const activeBadge = document.getElementById('parent-active-week-badge') as HTMLElement;
+      const weekSelect = document.getElementById('parent-week-select') as HTMLSelectElement;
+      const weekChips = document.getElementById('parent-week-chips') as HTMLElement;
+
+      expect(activeBadge).not.toBeNull();
+      expect(weekSelect).not.toBeNull();
+      expect(weekChips).not.toBeNull();
+
+      // Starts with default active week (e.g. Week 8)
+      expect(activeBadge.textContent).toContain('Active:');
+      expect(weekSelect.options.length).toBeGreaterThan(0);
+      expect(weekChips.children.length).toBeGreaterThan(0);
+    });
+
+    it('updates active week in storage and badge when clicking a week chip', () => {
+      unlockParentDashboard();
+
+      const activeBadge = document.getElementById('parent-active-week-badge') as HTMLElement;
+      const week7Chip = document.querySelector('.parent-week-chip[data-week-label="Week 7"]') as HTMLButtonElement;
+      expect(week7Chip).not.toBeNull();
+
+      // WHEN clicking Week 7 chip
+      week7Chip.click();
+
+      // THEN active week badge and storage update to Week 7
+      expect(activeBadge.textContent).toBe('Active: Week 7');
+      expect(localStorage.getItem(CURRENT_WEEK_KEY)).toBe('Week 7');
+      const activeChip = document.querySelector('.parent-week-chip[data-week-label="Week 7"]') as HTMLButtonElement;
+      expect(activeChip.classList.contains('is-active')).toBe(true);
+
+      const weekSelect = document.getElementById('parent-week-select') as HTMLSelectElement;
+      expect(weekSelect.value).toBe('Week 7');
+    });
+
+    it('updates active week when choosing a week from the select dropdown', () => {
+      unlockParentDashboard();
+
+      const activeBadge = document.getElementById('parent-active-week-badge') as HTMLElement;
+      const weekSelect = document.getElementById('parent-week-select') as HTMLSelectElement;
+
+      // WHEN changing select to Week 4
+      weekSelect.value = 'Week 4';
+      weekSelect.dispatchEvent(new Event('change'));
+
+      // THEN active week updates to Week 4
+      expect(activeBadge.textContent).toBe('Active: Week 4');
+      expect(localStorage.getItem(CURRENT_WEEK_KEY)).toBe('Week 4');
+
+      const week4Chip = document.querySelector('.parent-week-chip[data-week-label="Week 4"]') as HTMLButtonElement;
+      expect(week4Chip.classList.contains('is-active')).toBe(true);
     });
   });
 });
