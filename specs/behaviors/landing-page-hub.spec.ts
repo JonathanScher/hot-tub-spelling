@@ -118,7 +118,7 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
       expect(soundEngine.playModeQuack).toHaveBeenCalledWith(10);
     });
 
-    it('renders the Cover-Flow Carousel with a Selected crest (no bubble aura), wooden paddles, pebble dots, and scales from 2 to 10 levels', async () => {
+    it('renders the simplified Cover-Flow Carousel displaying only core visual elements (no level name, counter, progress bar, or selected crest/box)', async () => {
       // GIVEN an authenticated session on the Play Hub
       setMockAuthUser({ email: 'scher.jonathan@gmail.com', displayName: 'Zoé' });
       await Promise.resolve();
@@ -130,9 +130,30 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
       const btnPrev = document.getElementById('btn-level-prev') as HTMLButtonElement;
       const dotsContainer = document.getElementById('level-carousel-dots') as HTMLElement;
 
-      // THEN no bubble aura overlay exists on level cards, and each card has a top Selected crest
+      // THEN no bubble aura overlay exists on level cards
       expect(levelGroup.querySelector('.level-bubble-aura')).toBeNull();
-      expect(cardBathtub.querySelector('.level-selected-crest')).not.toBeNull();
+
+      // AND all redundant labels and status indicators are removed from carousel cards:
+      // 1. No level name text (.level-card-label)
+      // 2. No "level X of Y" counter text (.level-step-counter)
+      // 3. No progress bar/pips beneath title (.level-card-pips / .level-pip)
+      // 4. No green "selected" crest/box (.level-selected-crest)
+      [cardBathtub, cardChest].forEach((card) => {
+        expect(card.querySelector('.level-selected-crest')).toBeNull();
+        expect(card.querySelector('.level-step-counter')).toBeNull();
+        expect(card.querySelector('.level-card-label')).toBeNull();
+        expect(card.querySelector('.level-card-pips')).toBeNull();
+        expect(card.querySelector('.level-pip')).toBeNull();
+
+        // AND core level visual elements remain intact
+        expect(card.querySelector('.level-card-art')).not.toBeNull();
+        expect(card.querySelector('.level-card-img')).not.toBeNull();
+      });
+
+      // Accessible labels and roles remain preserved
+      expect(cardBathtub.getAttribute('aria-label')).toBe('Cozy Bathtub');
+      expect(cardChest.getAttribute('aria-label')).toBe('Chest Opening');
+
       expect(cardBathtub.classList.contains('pos-center')).toBe(true);
       expect(cardChest.classList.contains('pos-right')).toBe(true);
       expect(dotsContainer.querySelectorAll('.level-pebble-dot').length).toBe(2);
@@ -146,7 +167,7 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
       expect(cardChest.classList.contains('pos-center')).toBe(true);
       expect(cardBathtub.classList.contains('pos-left')).toBe(true);
 
-      // WHEN 8 additional level cards are added (totaling 10 levels) and a pebble dot is clicked
+      // WHEN 8 additional level cards are added (totaling 10 levels) with only core visual elements
       for (let i = 3; i <= 10; i++) {
         const extraCard = document.createElement('button');
         extraCard.type = 'button';
@@ -155,9 +176,9 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
         extraCard.setAttribute('role', 'radio');
         extraCard.setAttribute('aria-label', `Level ${i}`);
         extraCard.innerHTML = `
-          <span class="level-selected-crest" aria-hidden="true">★ Selected</span>
-          <span class="level-step-counter" aria-hidden="true"></span>
-          <span class="level-card-label">Level ${i}</span>
+          <span class="level-card-art">
+            <span class="level-card-placeholder">Level ${i} Art</span>
+          </span>
         `;
         levelGroup.appendChild(extraCard);
       }
@@ -184,10 +205,22 @@ describe('ADHD-Friendly 2-State Landing Page: Login Gate & Play Hub (Executable 
       (dots[5] as HTMLButtonElement).click();
       await Promise.resolve();
 
-      // THEN Level 6 moves to center stage and is selected
+      // THEN Level 6 moves to center stage and is selected without redundant labels
       expect(level6Card.classList.contains('is-selected')).toBe(true);
       expect(level6Card.classList.contains('pos-center')).toBe(true);
-      expect(level6Card.querySelector('.level-step-counter')?.textContent).toBe('Level 6 of 10');
+      expect(level6Card.querySelector('.level-step-counter')).toBeNull();
+      expect(level6Card.querySelector('.level-card-label')).toBeNull();
+      expect(level6Card.querySelector('.level-selected-crest')).toBeNull();
+    });
+
+    it('ensures styles.css does not include green border/box styling on selected level cards', () => {
+      const cssContent = fs.readFileSync(path.join(process.cwd(), 'styles.css'), 'utf8');
+      // Green borders (#3B6E28) and green shadows (#28541D) should not style the selected level card
+      const selectedRuleMatch = cssContent.match(/\.level-polaroid-card\.is-selected[^{]*\{([^}]+)\}/s);
+      expect(selectedRuleMatch).not.toBeNull();
+      const selectedRules = selectedRuleMatch ? selectedRuleMatch[1] : '';
+      expect(selectedRules).not.toContain('#3B6E28');
+      expect(selectedRules).not.toContain('#28541D');
     });
   });
 

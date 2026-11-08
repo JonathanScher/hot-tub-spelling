@@ -3071,11 +3071,11 @@ body {
   border-radius: 24px;
   border: 2.5px solid #5C3A21;
   background: linear-gradient(180deg, #F5E7D3 0%, #EEDAC0 100%);
-  padding: 16px 12px 12px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   cursor: pointer;
   opacity: 0.72;
   transform: translateX(0) translateY(8px) scale(0.82);
@@ -3128,87 +3128,33 @@ body {
   z-index: 0;
 }
 
-/* Selected / Center Card: Double-Bevel Sage & Gold Frame + Upward Lift (Zero Artwork Obstruction) */
+/* Selected / Center Card: Warm Wooden & Gold Frame + Upward Lift (Zero Artwork Obstruction) */
 .level-polaroid-card.is-selected,
 .level-polaroid-card.pos-center {
   opacity: 1;
   transform: translateX(0) translateY(-6px) scale(1.04);
   background: linear-gradient(180deg, #FFFDF9 0%, #F7E8D0 100%);
-  border: 3px solid #3B6E28;
+  border: 3px solid #5C3A21;
   box-shadow:
-    0 7px 0 #28541D,
+    0 7px 0 #4A2C16,
     0 0 0 4px #FAD246,
     0 16px 32px rgba(60, 35, 15, 0.22),
     inset 0 2px 0 #FFFFFF;
   z-index: 10;
 }
 
-/* Top "★ Selected" Pill Crest on Active Card */
-.level-selected-crest {
-  position: absolute;
-  top: -14px;
-  left: 50%;
-  transform: translateX(-50%) scale(0.85);
-  background: linear-gradient(180deg, #6FD25A 0%, #48A834 100%);
-  color: #FFFDF8;
-  border: 2px solid #28541D;
-  border-radius: 999px;
-  padding: 2px 12px;
-  font-family: var(--font-display);
-  font-size: 0.76rem;
-  font-weight: 800;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  text-shadow: 0 1px 1px #1F4416;
-  box-shadow: 0 2px 0 #234E19, 0 4px 8px rgba(40, 84, 29, 0.25);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s ease, transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1);
-  z-index: 12;
-}
-
-.level-polaroid-card.is-selected .level-selected-crest {
-  opacity: 1;
-  transform: translateX(-50%) scale(1);
-}
-
-.level-step-counter {
-  position: relative;
-  z-index: 2;
-  font-family: var(--font-display);
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #6E492A;
-  line-height: 1;
-  margin-bottom: 2px;
-}
-
-.level-card-label {
-  position: relative;
-  z-index: 2;
-  font-family: var(--font-display);
-  font-size: 1.18rem;
-  font-weight: 700;
-  color: #3E2210;
-  line-height: 1.15;
-  text-align: center;
-  margin-top: 4px;
-}
-
 .level-card-art {
   position: relative;
   z-index: 1;
   width: 100%;
+  height: 100%;
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border-radius: 14px;
+  border-radius: 16px;
 }
 
 .level-card-img {
@@ -3216,27 +3162,6 @@ body {
   height: 100%;
   object-fit: contain;
   mix-blend-mode: multiply;
-}
-
-.level-card-pips {
-  display: none;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  margin-top: 4px;
-  z-index: 2;
-}
-
-.level-pip {
-  width: 11px;
-  height: 11px;
-  border-radius: 3px;
-  background: #9B714C;
-  border: 1.2px solid #5C3A21;
-}
-
-.level-pip.is-hollow {
-  background: rgba(255, 252, 245, 0.65);
 }
 
 /* Pebble Step Dots Row (Supports 2 to 10 Levels) */
@@ -3663,8 +3588,8 @@ body {
 
   .level-polaroid-card {
     width: 148px;
-    height: 168px;
-    padding: 12px 8px 8px;
+    height: 152px;
+    padding: 8px;
     border-radius: 18px;
   }
 
@@ -3686,14 +3611,6 @@ body {
     transform: translateX(140px) translateY(14px) scale(0.62) rotate(6deg);
     opacity: 0;
     pointer-events: none;
-  }
-
-  .level-card-label {
-    font-size: 0.92rem;
-  }
-
-  .level-card-pips {
-    display: flex;
   }
 
   .hub-mode-pill {
