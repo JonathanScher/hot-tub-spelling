@@ -112,7 +112,7 @@ describe('Cosmetic Gamification Stars & Core Edge Cases (Executable Specificatio
       const defaults = getDefaultStarterWords('2026-11-01');
       expect(loaded.length).toBe(defaults.length);
       expect(loaded[0].word).toBe(defaults[0].word);
-      expect(storage.getItem('hottub_current_week_label_v2')).toBe('Week 8');
+      expect(storage.getItem('hottub_current_week_label_v2')).toBe('Week 9');
     });
   });
 

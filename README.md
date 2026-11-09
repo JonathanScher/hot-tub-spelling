@@ -2,7 +2,7 @@
 
 A calm, storybook-styled French & English vocabulary and spelling web game built for children on **Smartphones** and **Amazon Fire Tablets (Silk Browser)**, powered by a **Leitner Box Spaced Repetition System (SRS)** and an offline-first **Firebase (Cloud Firestore + Google Authentication)** cloud sync backend.
 
-Works straight out of the box on **GitHub Pages** (100% static HTML5, CSS3, and modular ES6 JavaScript—no build step required), complete with 16 initial French words (**Week 7** & **Week 8**) pre-loaded and ready to seed Firestore automatically on first sign-in.
+Works straight out of the box on **GitHub Pages** (100% static HTML5, CSS3, and modular ES6 JavaScript—no build step required), complete with 25 initial French words (**Week 7**, **Week 8** & **Week 9**) pre-loaded and ready to seed Firestore automatically on first sign-in.
 
 ---
 
@@ -10,6 +10,7 @@ Works straight out of the box on **GitHub Pages** (100% static HTML5, CSS3, and 
 
 - **Week 7:** `sans`, `suivre`, `savoir`, `sauter`, `semaine`, `serpent`, `sortir`, `soleil`, `souvent`
 - **Week 8:** `câlin`, `singe`, `enfin`, `quinze`, `prince`, `loin`, `printemps`
+- **Week 9:** `sage`, `village`, `image`, `page`, `large`, `ange`, `orange`, `luge`, `fromage`
 
 ---
 

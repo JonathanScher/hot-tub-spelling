@@ -6,7 +6,7 @@
  *   secured by Firebase Authentication and family email Security Rules.
  * - Offline-first queue: saves dirty SRS updates and weekly additions locally, syncing automatically
  *   whenever online or at session start.
- * - Automatically seeds an empty Firestore database with the initial Week 7 & Week 8 word lists.
+ * - Automatically seeds an empty Firestore database with the initial Week 7, Week 8 & Week 9 word lists.
  */
 
 import {
@@ -28,6 +28,7 @@ import {
   normalizeWord,
   getActiveProfileId,
   getDefaultAudioUrl,
+  getDefaultStarterWords,
   DIRTY_TRAP_HISTORY_STORAGE_KEY,
   TEST_DIRTY_TRAP_HISTORY_STORAGE_KEY,
   getDirtyProfileTrapHistory,
@@ -321,10 +322,12 @@ class CloudSyncManager {
 
         const remoteWords = [];
         const missingAudioWords = [];
+        const remoteWordSet = new Set();
         wordsSnap.forEach((docSnap) => {
           const d = docSnap.data();
           if (d && d.word) {
             remoteWords.push(d);
+            remoteWordSet.add(normalizeWord(d.word));
             const defAudio = getDefaultAudioUrl(d.word);
             if (defAudio && (!d.custom_audio_url || !String(d.custom_audio_url).trim())) {
               missingAudioWords.push({ word: d.word, custom_audio_url: defAudio });
@@ -337,7 +340,20 @@ class CloudSyncManager {
           this._backfillMissingDefaultAudio(missingAudioWords).catch(() => {});
         }
 
-        // If Firestore is brand new and empty, seed it with our local starter words (Week 7 & Week 8)!
+        // If remote Firestore is missing default starter words (e.g. Week 9 curriculum added),
+        // backfill them to Firestore non-blockingly so all devices stay in sync
+        const missingDefaultWords = [];
+        for (const starter of getDefaultStarterWords()) {
+          const cleanW = normalizeWord(starter.word);
+          if (!remoteWordSet.has(cleanW)) {
+            missingDefaultWords.push(starter);
+          }
+        }
+        if (missingDefaultWords.length > 0) {
+          this._backfillMissingDefaultWords(missingDefaultWords).catch(() => {});
+        }
+
+        // If Firestore is brand new and empty, seed it with our local starter words (Week 7, Week 8 & Week 9)!
         if (remoteWords.length === 0) {
           const localStarter = loadWords();
           const currentWeek = getCurrentWeekLabel(localStarter);
@@ -387,7 +403,7 @@ class CloudSyncManager {
       const wordRef = doc(db, WORDS_COLLECTION, toWordDocId(cleanWord));
       batch.set(wordRef, {
         word: cleanWord,
-        week_label: w.week_label || 'Week 8',
+        week_label: w.week_label || 'Week 9',
         active: w.active !== false,
         box: w.box || 1,
         next_review: w.next_review,
@@ -416,7 +432,7 @@ class CloudSyncManager {
     batch.set(
       metaRef,
       {
-        current_week_label: currentWeekLabel || 'Week 8',
+        current_week_label: currentWeekLabel || 'Week 9',
         profiles: profilesPayload,
         trapHistory: daughterTrapHistory,
         updated_at: nowIso,
@@ -426,6 +442,52 @@ class CloudSyncManager {
     );
 
     await batch.commit();
+  }
+
+  /**
+   * Backfills new starter words (e.g. Week 9 additions) to existing remote Firestore database
+   * when missing, without touching existing words or stats.
+   * @param {Array<any>} wordsList
+   */
+  async _backfillMissingDefaultWords(wordsList) {
+    if (!auth.currentUser || !Array.isArray(wordsList) || wordsList.length === 0) return;
+    try {
+      const batch = writeBatch(db);
+      const nowIso = new Date().toISOString();
+      for (const item of wordsList) {
+        const cleanWord = normalizeWord(item.word);
+        if (!cleanWord) continue;
+        const wordRef = doc(db, WORDS_COLLECTION, toWordDocId(cleanWord));
+        batch.set(
+          wordRef,
+          {
+            word: cleanWord,
+            week_label: item.week_label || 'Week 9',
+            active: item.active !== false,
+            box: item.box || 1,
+            next_review: item.next_review || getLocalISODate(),
+            streak: item.streak || 0,
+            total_attempts: item.total_attempts || 0,
+            correct_attempts: item.correct_attempts || 0,
+            custom_audio_url: item.custom_audio_url || getDefaultAudioUrl(cleanWord) || '',
+            updated_at: nowIso
+          },
+          { merge: true }
+        );
+      }
+      const metaRef = doc(db, METADATA_COLLECTION, APP_STATE_DOC);
+      batch.set(
+        metaRef,
+        {
+          current_week_label: 'Week 9',
+          updated_at: nowIso
+        },
+        { merge: true }
+      );
+      await batch.commit();
+    } catch {
+      // Non-blocking background backfill
+    }
   }
 
   /**

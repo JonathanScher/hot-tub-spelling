@@ -136,7 +136,7 @@ describe('SRS & Vocabulary Store Mechanics (js/srs.js)', () => {
   });
 
   describe('Starter Words & Storage Seeding', () => {
-    it('seeds 16 default French words across Week 7 (9 words) and Week 8 (7 words) when storage is empty', () => {
+    it('seeds 25 default French words across Week 7 (9 words), Week 8 (7 words), and Week 9 (9 words) when storage is empty', () => {
       // GIVEN an empty isolated storage and fixed date
       const storage = createIsolatedStorage();
       const today = '2026-11-01';
@@ -146,11 +146,12 @@ describe('SRS & Vocabulary Store Mechanics (js/srs.js)', () => {
       const currentWeek = getCurrentWeekLabel(words, storage);
 
       // THEN 16 starter words are returned, saved to storage, and current week is set to Week 8
-      expect(words).toHaveLength(16);
+      expect(words).toHaveLength(25);
+      expect(words.filter((w) => w.week_label === 'Week 9')).toHaveLength(9);
       expect(words.filter((w) => w.week_label === 'Week 7')).toHaveLength(9);
       expect(words.filter((w) => w.week_label === 'Week 8')).toHaveLength(7);
       expect(words.every((w) => w.box === 1 && w.next_review === today && w.total_attempts === 0)).toBe(true);
-      expect(currentWeek).toBe('Week 8');
+      expect(currentWeek).toBe('Week 9');
     });
   });
 
@@ -487,10 +488,10 @@ describe('SRS & Vocabulary Store Mechanics (js/srs.js)', () => {
 
       // THEN 10 unique words are selected: all 7 from Week 8 + 3 from Week 7
       expect(session).toHaveLength(10);
-      const week8Picked = session.filter((w) => w.week_label === 'Week 8');
-      const week7Picked = session.filter((w) => w.week_label === 'Week 7');
-      expect(week8Picked).toHaveLength(7);
-      expect(week7Picked).toHaveLength(3);
+      const week9Picked = session.filter((w) => w.week_label === 'Week 9');
+      const pastPicked = session.filter((w) => w.week_label !== 'Week 9');
+      expect(week9Picked).toHaveLength(8);
+      expect(pastPicked).toHaveLength(2);
     });
 
     it('reserves up to 2 slots for overdue past-week words even when current week has >= 9 due words', () => {
@@ -723,7 +724,7 @@ describe('SRS & Vocabulary Store Mechanics (js/srs.js)', () => {
       const remaining = removeWordFromStore('seul', { today, storage });
 
       // THEN store re-seeds with the 16 default starter words
-      expect(remaining).toHaveLength(16);
+      expect(remaining).toHaveLength(25);
     });
 
     it('shuffles deterministically when given a seeded PRNG', () => {
@@ -746,10 +747,11 @@ describe('SRS & Vocabulary Store Mechanics (js/srs.js)', () => {
     const expected16 = [
       'sans', 'suivre', 'savoir', 'sauter', 'semaine',
       'serpent', 'sortir', 'soleil', 'souvent',
-      'câlin', 'singe', 'enfin', 'quinze', 'prince', 'loin', 'printemps'
+      'câlin', 'singe', 'enfin', 'quinze', 'prince', 'loin', 'printemps',
+      'sage', 'village', 'image', 'page', 'large', 'ange', 'orange', 'luge', 'fromage'
     ];
 
-    it('maps every default Week 7 and Week 8 word to its bundled audio asset', () => {
+    it('maps every default Week 7, Week 8, and Week 9 word to its bundled audio asset', () => {
       for (const word of expected16) {
         const audioUrl = getDefaultAudioUrl(word);
         expect(audioUrl).toBe(`assets/audio/words/${word}.mp3`);
@@ -761,7 +763,7 @@ describe('SRS & Vocabulary Store Mechanics (js/srs.js)', () => {
 
     it('populates custom_audio_url in getDefaultStarterWords()', () => {
       const starters = getDefaultStarterWords('2026-11-01');
-      expect(starters).toHaveLength(16);
+      expect(starters).toHaveLength(25);
       for (const rec of starters) {
         expect(rec.custom_audio_url).toBe(`assets/audio/words/${rec.word}.mp3`);
       }
@@ -801,6 +803,42 @@ describe('SRS & Vocabulary Store Mechanics (js/srs.js)', () => {
       expect(soleil?.custom_audio_url).toBe('assets/audio/words/soleil.mp3');
       // singe had an explicit custom url, so it is preserved
       expect(singe?.custom_audio_url).toBe('https://example.com/custom.mp3');
+    });
+
+    it('seamlessly introduces Week 9 words without resetting daughter statistics on existing words', () => {
+      const storage = createIsolatedStorage();
+      const today = '2026-11-01';
+
+      // GIVEN daughter already practiced Week 7 & 8 words with real progress
+      const existing = [
+        normalizeWordRecord({ word: 'sans', week_label: 'Week 7', box: 4, streak: 3, total_attempts: 5, correct_attempts: 4 }, 'Week 7', today),
+        normalizeWordRecord({ word: 'câlin', week_label: 'Week 8', box: 5, streak: 5, total_attempts: 6, correct_attempts: 6 }, 'Week 8', today)
+      ];
+      saveWords(existing, storage, 'daughter');
+
+      // WHEN loadWords runs on Week 9 curriculum upgrade
+      const words = loadWords(storage, today, 'daughter');
+
+      // THEN existing words retain their exact stats
+      const sans = words.find((w) => w.word === 'sans');
+      const calin = words.find((w) => w.word === 'câlin');
+      expect(sans?.box).toBe(4);
+      expect(sans?.streak).toBe(3);
+      expect(sans?.total_attempts).toBe(5);
+      expect(calin?.box).toBe(5);
+      expect(calin?.streak).toBe(5);
+
+      // AND Week 9 words are added with initial Box 1 stats and bundled audio
+      const sage = words.find((w) => w.word === 'sage');
+      expect(sage).toBeDefined();
+      expect(sage?.week_label).toBe('Week 9');
+      expect(sage?.box).toBe(1);
+      expect(sage?.total_attempts).toBe(0);
+      expect(sage?.custom_audio_url).toBe('assets/audio/words/sage.mp3');
+
+      // AND total active words is now 25 and current week is Week 9
+      expect(words).toHaveLength(25);
+      expect(getCurrentWeekLabel(words, storage)).toBe('Week 9');
     });
   });
 });

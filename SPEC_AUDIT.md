@@ -59,7 +59,7 @@ This audit catalogs the complete runtime state tree, maps all side-effect and br
 | Property | Type | Storage Location | Description |
 | :--- | :--- | :--- | :--- |
 | `word` | `string` | `localStorage['hottub_srs_words_v2']` | Normalized lowercase word string (whitespace stripped). |
-| `week_label` | `string` | `localStorage['hottub_srs_words_v2']` | Week grouping label (e.g., `'Week 7'`, `'Week 8'`). |
+| `week_label` | `string` | `localStorage['hottub_srs_words_v2']` | Week grouping label (e.g., `'Week 7'`, `'Week 8'`, `'Week 9'`). |
 | `active` | `boolean` | `localStorage['hottub_srs_words_v2']` | Whether the word is active in rotation (`true` by default). |
 | `box` | `number` | `localStorage['hottub_srs_words_v2']` | Leitner Box level clamped to integer `[1, 5]`. |
 | `next_review` | `string` | `localStorage['hottub_srs_words_v2']` | Local ISO date string `YYYY-MM-DD` when word is next due. |
@@ -67,7 +67,7 @@ This audit catalogs the complete runtime state tree, maps all side-effect and br
 | `total_attempts` | `number` | `localStorage['hottub_srs_words_v2']` | Total sessions where this word was attempted (`>= 0`). |
 | `correct_attempts` | `number` | `localStorage['hottub_srs_words_v2']` | Total spotless first-attempt sessions (`0 <= correct_attempts <= total_attempts`). |
 | `custom_audio_url` | `string` | `localStorage['hottub_srs_words_v2']` | Optional URL for Tier-1 custom pronunciation audio. |
-| `currentWeekLabel` | `string` | `localStorage['hottub_current_week_label_v2']` | Active week label string (defaults to `'Week 8'` or highest `Week N`). |
+| `currentWeekLabel` | `string` | `localStorage['hottub_current_week_label_v2']` | Active week label string (defaults to `'Week 9'` or highest `Week N`). |
 
 ### 1.4 Auxiliary Module & UI Controller State
 - **UI Controller ([`js/app.js`](file:///c:/Users/scher/Documents/antigravity/adventurous-lavoisier/js/app.js)):** `toastTimer`, `holdStartTs`, `holdRaf`, `holdTriggered`, `expectedMathSum` (parent lock math challenge `a + b` where $a \in [6, 13]$, $b \in [5, 13]$).
@@ -128,7 +128,7 @@ This audit catalogs the complete runtime state tree, maps all side-effect and br
 1. **Word String Normalization (`normalizeWord`):**
    - Converts input to `String(raw || '').trim().toLowerCase().replace(/\s+/g, '')`.
    - Accented Unicode characters (e.g., `câlin`, `é`, `è`, `ê`, `ç`) are preserved intact; all internal whitespace is stripped.
-2. **Word Record Normalization (`normalizeWordRecord(raw, fallbackWeek = 'Week 8')`):**
+2. **Word Record Normalization (`normalizeWordRecord(raw, fallbackWeek = 'Week 9')`):**
    - `word`: `normalizeWord(raw && raw.word ? raw.word : raw)`.
    - `box`: `Math.min(5, Math.max(1, parseInt(raw && raw.box, 10) || 1))` (clamped to `[1, 5]`; invalid/0/negative defaults to `1`).
    - `total_attempts`: `Math.max(0, parseInt(raw && raw.total_attempts, 10) || 0)`.
@@ -160,7 +160,7 @@ This audit catalogs the complete runtime state tree, maps all side-effect and br
      - `correct_attempts` remains unchanged.
 3. **Current Week Resolution (`getCurrentWeekLabel`):**
    - Uses stored `CURRENT_WEEK_KEY` if at least one active word has that `week_label`.
-   - Otherwise scans active words for `/^week\s*(\d+)$/i` and selects the label with the highest numeric week (`num >= bestNum`, so ties favor later entries), falling back to the last active word's `week_label`, or `'Week 8'` if no active words exist.
+   - Otherwise scans active words for `/^week\s*(\d+)$/i` and selects the label with the highest numeric week (`num >= bestNum`, so ties favor later entries), falling back to the last active word's `week_label`, or `'Week 9'` if no active words exist.
 4. **Session Queue Construction (`buildSessionWords(allWords, minWords = 8, maxWords = 10)`):**
    - Filters `active` words (`w.active !== false && w.word && w.word.length > 0`). If empty, returns `getDefaultStarterWords().slice(0, maxWords)` (**CHARACTERIZATION NOTE:** when falling back to starter words on empty active list, it returns unshuffled starter words directly without calling `shuffleGently`).
    - Splits `active` into `currentWeekWords` (`w.week_label === currentWeek`) and `pastWeekWords` (`w.week_label !== currentWeek`).

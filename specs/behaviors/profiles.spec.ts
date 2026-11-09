@@ -213,19 +213,19 @@ describe('Learner Profiles & Test Isolation (js/srs.js)', () => {
 
       // Daughter profile: 16 total, 16 due, 0 mastered
       const daughterSummary1 = getProfileStatsSummary('daughter', storage, today);
-      expect(daughterSummary1.totalWords).toBe(16);
-      expect(daughterSummary1.dueWords).toBe(16);
+      expect(daughterSummary1.totalWords).toBe(25);
+      expect(daughterSummary1.dueWords).toBe(25);
       expect(daughterSummary1.masteredWords).toBe(0);
 
       // Practice 'singe' with 0 errors in daughter profile -> next review tomorrow
       recordFirstAttemptSRS('singe', 0, { storage, today, profileId: 'daughter' });
 
       const daughterSummary2 = getProfileStatsSummary('daughter', storage, today);
-      expect(daughterSummary2.dueWords).toBe(15); // 'singe' no longer due today
+      expect(daughterSummary2.dueWords).toBe(24); // 'singe' no longer due today
 
       // Test profile was untouched -> still 16 due today
       const testSummary = getProfileStatsSummary('test', storage, today);
-      expect(testSummary.dueWords).toBe(16);
+      expect(testSummary.dueWords).toBe(25);
     });
   });
 
