@@ -821,7 +821,7 @@ export function addDaysISO(baseIso, daysToAdd, fallbackDate) {
 }
 
 /**
- * Bundled offline audio files for Week 7, Week 8, and Week 9 starter curriculum.
+ * Bundled offline audio files for Week 7, Week 8, Week 9, and Week 10 starter curriculum.
  * @type {Record<string, string>}
  */
 export const DEFAULT_WORD_AUDIO_MAP = {
@@ -849,7 +849,17 @@ export const DEFAULT_WORD_AUDIO_MAP = {
   'ange': 'assets/audio/words/ange.mp3',
   'orange': 'assets/audio/words/orange.mp3',
   'luge': 'assets/audio/words/luge.mp3',
-  'fromage': 'assets/audio/words/fromage.mp3'
+  'fromage': 'assets/audio/words/fromage.mp3',
+  'pirate': 'assets/audio/words/pirate.mp3',
+  'carotte': 'assets/audio/words/carotte.mp3',
+  'ensuite': 'assets/audio/words/ensuite.mp3',
+  'haute': 'assets/audio/words/haute.mp3',
+  'vite': 'assets/audio/words/vite.mp3',
+  'toute': 'assets/audio/words/toute.mp3',
+  'trente': 'assets/audio/words/trente.mp3',
+  'quarante': 'assets/audio/words/quarante.mp3',
+  'cinquante': 'assets/audio/words/cinquante.mp3',
+  'soixante': 'assets/audio/words/soixante.mp3'
 };
 
 /**
@@ -863,7 +873,7 @@ export function getDefaultAudioUrl(word) {
 }
 
 /**
- * Initial starter word list (Week 7, Week 8 & Week 9) so the game is immediately playable
+ * Initial starter word list (Week 7, Week 8, Week 9 & Week 10) so the game is immediately playable
  * and seeds Cloud Firestore on first connect.
  * @param {string} [todayIso]
  * @returns {WordRecord[]}
@@ -900,6 +910,18 @@ export function getDefaultStarterWords(todayIso) {
     'orange',
     'luge',
     'fromage'
+  ];
+  const week10Words = [
+    'pirate',
+    'carotte',
+    'ensuite',
+    'haute',
+    'vite',
+    'toute',
+    'trente',
+    'quarante',
+    'cinquante',
+    'soixante'
   ];
 
   /** @type {WordRecord[]} */
@@ -944,6 +966,20 @@ export function getDefaultStarterWords(todayIso) {
     });
   }
 
+  for (const word of week10Words) {
+    records.push({
+      word,
+      week_label: 'Week 10',
+      active: true,
+      box: 1,
+      next_review: today,
+      streak: 0,
+      total_attempts: 0,
+      correct_attempts: 0,
+      custom_audio_url: getDefaultAudioUrl(word)
+    });
+  }
+
   return records;
 }
 
@@ -962,11 +998,11 @@ export function normalizeWord(raw) {
 /**
  * Normalizes a full word record to match the Firestore & LocalStorage schema.
  * @param {any} raw
- * @param {string} [fallbackWeek='Week 9']
+ * @param {string} [fallbackWeek='Week 10']
  * @param {string} [todayIso]
  * @returns {WordRecord}
  */
-export function normalizeWordRecord(raw, fallbackWeek = 'Week 9', todayIso) {
+export function normalizeWordRecord(raw, fallbackWeek = 'Week 10', todayIso) {
   const today = todayIso || getLocalISODate();
   const word = normalizeWord(raw && typeof raw === 'object' && 'word' in raw ? raw.word : raw);
   const rawBox = raw && typeof raw === 'object' ? raw.box : undefined;
@@ -1010,7 +1046,7 @@ export function normalizeWordRecord(raw, fallbackWeek = 'Week 9', todayIso) {
 }
 
 /**
- * Loads all words from storage, seeding the Week 7, Week 8 & Week 9 starter words on first run.
+ * Loads all words from storage, seeding the Week 7, Week 8, Week 9 & Week 10 starter words on first run.
  * Respects the active profile: if active profile is 'daughter', returns base words;
  * if 'test' (or other), overlays the isolated profile progress map onto the shared word list.
  *
@@ -1030,20 +1066,20 @@ export function loadWords(customStorage, todayIso, profileId) {
     if (!raw) {
       const defaults = getDefaultStarterWords(today);
       saveWords(defaults, store, 'daughter');
-      store.setItem(CURRENT_WEEK_KEY, 'Week 9');
+      store.setItem(CURRENT_WEEK_KEY, 'Week 10');
       baseWords = defaults;
     } else {
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed) || parsed.length === 0) {
         const defaults = getDefaultStarterWords(today);
         saveWords(defaults, store, 'daughter');
-        store.setItem(CURRENT_WEEK_KEY, 'Week 9');
+        store.setItem(CURRENT_WEEK_KEY, 'Week 10');
         baseWords = defaults;
       } else {
         const seen = new Set();
         const cleaned = [];
         for (const item of parsed) {
-          const rec = normalizeWordRecord(item, 'Week 9', today);
+          const rec = normalizeWordRecord(item, 'Week 10', today);
           if (rec.word && !seen.has(rec.word)) {
             seen.add(rec.word);
             if (!rec.custom_audio_url) {
@@ -1219,7 +1255,7 @@ export function getCurrentWeekLabel(words, customStorage) {
 
     return bestLabel;
   }
-  return 'Week 9';
+  return 'Week 10';
 }
 
 /**
@@ -1322,7 +1358,7 @@ export function mergeWordsFromCloud(
   let highestWeekNum = -1;
 
   for (const row of remoteRows) {
-    const remoteRec = normalizeWordRecord(row, 'Week 9', todayIso);
+    const remoteRec = normalizeWordRecord(row, 'Week 10', todayIso);
     if (!remoteRec.word) continue;
     if (!remoteRec.custom_audio_url) {
       const def = getDefaultAudioUrl(remoteRec.word);

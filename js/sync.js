@@ -6,7 +6,7 @@
  *   secured by Firebase Authentication and family email Security Rules.
  * - Offline-first queue: saves dirty SRS updates and weekly additions locally, syncing automatically
  *   whenever online or at session start.
- * - Automatically seeds an empty Firestore database with the initial Week 7, Week 8 & Week 9 word lists.
+ * - Automatically seeds an empty Firestore database with the initial Week 7, Week 8, Week 9 & Week 10 word lists.
  */
 
 import {
@@ -29,6 +29,7 @@ import {
   getActiveProfileId,
   getDefaultAudioUrl,
   getDefaultStarterWords,
+  getLocalISODate,
   DIRTY_TRAP_HISTORY_STORAGE_KEY,
   TEST_DIRTY_TRAP_HISTORY_STORAGE_KEY,
   getDirtyProfileTrapHistory,
@@ -340,7 +341,7 @@ class CloudSyncManager {
           this._backfillMissingDefaultAudio(missingAudioWords).catch(() => {});
         }
 
-        // If remote Firestore is missing default starter words (e.g. Week 9 curriculum added),
+        // If remote Firestore is missing default starter words (e.g. Week 10 curriculum added),
         // backfill them to Firestore non-blockingly so all devices stay in sync
         const missingDefaultWords = [];
         for (const starter of getDefaultStarterWords()) {
@@ -353,7 +354,7 @@ class CloudSyncManager {
           this._backfillMissingDefaultWords(missingDefaultWords).catch(() => {});
         }
 
-        // If Firestore is brand new and empty, seed it with our local starter words (Week 7, Week 8 & Week 9)!
+        // If Firestore is brand new and empty, seed it with our local starter words (Week 7, Week 8, Week 9 & Week 10)!
         if (remoteWords.length === 0) {
           const localStarter = loadWords();
           const currentWeek = getCurrentWeekLabel(localStarter);
@@ -403,7 +404,7 @@ class CloudSyncManager {
       const wordRef = doc(db, WORDS_COLLECTION, toWordDocId(cleanWord));
       batch.set(wordRef, {
         word: cleanWord,
-        week_label: w.week_label || 'Week 9',
+        week_label: w.week_label || 'Week 10',
         active: w.active !== false,
         box: w.box || 1,
         next_review: w.next_review,
@@ -432,7 +433,7 @@ class CloudSyncManager {
     batch.set(
       metaRef,
       {
-        current_week_label: currentWeekLabel || 'Week 9',
+        current_week_label: currentWeekLabel || 'Week 10',
         profiles: profilesPayload,
         trapHistory: daughterTrapHistory,
         updated_at: nowIso,
@@ -445,7 +446,7 @@ class CloudSyncManager {
   }
 
   /**
-   * Backfills new starter words (e.g. Week 9 additions) to existing remote Firestore database
+   * Backfills new starter words (e.g. Week 10 additions) to existing remote Firestore database
    * when missing, without touching existing words or stats.
    * @param {Array<any>} wordsList
    */
@@ -462,7 +463,7 @@ class CloudSyncManager {
           wordRef,
           {
             word: cleanWord,
-            week_label: item.week_label || 'Week 9',
+            week_label: item.week_label || 'Week 10',
             active: item.active !== false,
             box: item.box || 1,
             next_review: item.next_review || getLocalISODate(),
@@ -479,7 +480,7 @@ class CloudSyncManager {
       batch.set(
         metaRef,
         {
-          current_week_label: 'Week 9',
+          current_week_label: 'Week 10',
           updated_at: nowIso
         },
         { merge: true }
